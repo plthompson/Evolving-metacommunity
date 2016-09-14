@@ -53,7 +53,7 @@ for(j in 1:patches){
   }
 }
 
-V_all<-c(0,0.0001,0.001,0.01,0.1,1) #additive genetic variation in thermal optimum
+V_all<-c(0,0.0001,0.001,0.01,0.1,1,10) #additive genetic variation in thermal optimum
 dispV<-c(0,0.0001,0.001,0.01,0.1,1)
 
 for(r in 1:reps){
@@ -146,7 +146,7 @@ for(r in 1:reps){
       #plot(z_store[1,,1],colSums(N), pch=19, ylab="Regional abundance",xlab="Initial trait")
       
       #plot(Temp,rowSums(N), pch=19)
-
+      
       # ggplot(N.df,aes(x=Species,y=Env_trait,size=N,fill=Env_trait))+
       #   geom_point(pch=21)+
       #   #scale_fill_gradientn(colors=brewer.pal(9,name = "BuGn"))+
@@ -170,13 +170,15 @@ for(r in 1:reps){
       z_present<-z
       z_present[N==0]<-NA
       
+      z[is.infinite(z)]<-NA
+      
       mean_z_change<-rep(NA,species)
       for(j in 1:species){
         if(sum(N[,j])>0){
-          max_patches<-which(N[,j]==max(N[,j]))
-          mean_z_change[j]<-mean(abs(z[max_patches,j]-z_initial[1,j]))
+          mean_z_change[j]<-abs(weighted.mean(z[,j],N[,j])-z_initial[1,j])
         }
       }
+      
       
       hold<-apply(z_present,2,sd,na.rm=TRUE)
       
@@ -197,90 +199,89 @@ for(r in 1:reps){
     }
   }
 }
-  response.df$Response<-factor(response.df$Response,levels=c("Local richness","Regional richness","Local biomass","Range size","Optima sd","Optima change"),ordered = TRUE)
-  
-  ggplot(response.df,aes(x=Dispersal,y=Value,group=Adapt_potential, color=Adapt_potential))+
-    scale_color_viridis(trans="log",breaks=V_all)+
-    geom_point()+
-    geom_line()+
-    facet_wrap(~Response,scales = "free")+
-    scale_x_log10()+
-    theme_bw()+
-    removeGrid()
-  
-  
-  ggplot(filter(response.df, Response=="Regional richness"),aes(x=Dispersal,y=Adapt_potential,fill=Value))+
-    scale_fill_viridis()+
-    geom_tile()+
-    facet_wrap(~Response,scales = "free")+
-    scale_y_log10()+
-    scale_x_log10()+
-    theme_bw()+
-    removeGrid()
-  
-  ggplot(filter(response.df, Response=="Local richness"),aes(x=Dispersal,y=Adapt_potential,fill=Value))+
-    scale_fill_viridis()+
-    geom_tile()+
-    facet_wrap(~Response,scales = "free")+
-    scale_y_log10()+
-    scale_x_log10()+
-    theme_bw()+
-    removeGrid()
-  
-  ggplot(filter(response.df, Response=="Local biomass"),aes(x=Dispersal,y=Adapt_potential,fill=Value))+
-    scale_fill_viridis()+
-    geom_tile()+
-    facet_wrap(~Response,scales = "free")+
-    scale_y_log10()+
-    scale_x_log10()+
-    theme_bw()+
-    removeGrid()
-  
-  ggplot(filter(response.df, Response=="Optima change"),aes(x=Dispersal,y=Adapt_potential,fill=Value))+
-    scale_fill_viridis()+
-    geom_tile()+
-    facet_wrap(~Response,scales = "free")+
-    scale_y_log10()+
-    scale_x_log10()+
-    theme_bw()+
-    removeGrid()
-  
-  ggplot(filter(response.df, Response=="Optima sd"),aes(x=Dispersal,y=Adapt_potential,fill=Value))+
-    scale_fill_viridis()+
-    geom_tile()+
-    facet_wrap(~Response,scales = "free")+
-    scale_y_log10()+
-    scale_x_log10()+
-    theme_bw()+
-    removeGrid()
-  
-  ggplot(filter(response.df, Response=="Range size"),aes(x=Dispersal,y=Adapt_potential,fill=Value))+
-    scale_fill_viridis()+
-    geom_tile()+
-    facet_wrap(~Response,scales = "free")+
-    scale_y_log10()+
-    scale_x_log10()+
-    theme_bw()+
-    removeGrid()
-  
-  response.df<-response.df%>%
-    group_by(Response)%>%
-    mutate(Value_std=scale(Value))
-  
-  ggplot(response.df,aes(x=Dispersal,y=Adapt_potential,fill=Value))+
-    scale_color_viridis(trans="log",breaks=V_all)+
-    geom_tile()+
-    facet_wrap(~Response)+
-    scale_x_log10()+
-    theme_bw()+
-    removeGrid()
-  
-  ggplot(response.df,aes(x=Dispersal,y=Adapt_potential,fill=Value_std))+
-    scale_fill_viridis()+
-    geom_tile()+
-    facet_wrap(~Response)+
-    scale_y_log10()+
-    scale_x_log10()+
-    theme_bw()+
-    removeGrid()
-  
+
+response.df$Response<-factor(response.df$Response,levels=c("Local richness","Regional richness","Local biomass","Range size","Optima sd","Optima change"),ordered = TRUE)
+
+response_means<-response.df %>% 
+  group_by(Response,Dispersal,Adapt_potential) %>% 
+  summarise(Mean=mean(Value, na.rm=T),Lower=quantile(Value,probs = 0.25),Upper = quantile(Value,probs = 0.75))
+
+ggplot(response_means,aes(x=Dispersal,y=Mean,group=Adapt_potential, color=Adapt_potential))+
+  scale_color_viridis(trans="log",breaks=V_all)+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~Response,scales = "free")+
+  scale_x_log10()+
+  theme_bw()+
+  removeGrid()
+
+
+ggplot(filter(response_means, Response=="Regional richness"),aes(x=Dispersal,y=Adapt_potential,fill=Mean))+
+  scale_fill_viridis()+
+  geom_tile()+
+  facet_wrap(~Response,scales = "free")+
+  scale_y_log10()+
+  scale_x_log10()+
+  theme_bw()+
+  removeGrid()
+
+ggplot(filter(response_means, Response=="Local richness"),aes(x=Dispersal,y=Adapt_potential,fill=Mean))+
+  scale_fill_viridis()+
+  geom_tile()+
+  facet_wrap(~Response,scales = "free")+
+  scale_y_log10()+
+  scale_x_log10()+
+  theme_bw()+
+  removeGrid()
+
+ggplot(filter(response_means, Response=="Local biomass"),aes(x=Dispersal,y=Adapt_potential,fill=Mean))+
+  scale_fill_viridis()+
+  geom_tile()+
+  facet_wrap(~Response,scales = "free")+
+  scale_y_log10()+
+  scale_x_log10()+
+  theme_bw()+
+  removeGrid()
+
+ggplot(filter(response_means, Response=="Optima change"),aes(x=Dispersal,y=Adapt_potential,fill=Mean))+
+  scale_fill_viridis()+
+  geom_tile()+
+  facet_wrap(~Response,scales = "free")+
+  scale_y_log10()+
+  scale_x_log10()+
+  theme_bw()+
+  removeGrid()
+
+ggplot(filter(response_means, Response=="Optima sd"),aes(x=Dispersal,y=Adapt_potential,fill=Mean))+
+  scale_fill_viridis()+
+  geom_tile()+
+  facet_wrap(~Response,scales = "free")+
+  scale_y_log10()+
+  scale_x_log10()+
+  theme_bw()+
+  removeGrid()
+
+ggplot(filter(response_means, Response=="Range size"),aes(x=Dispersal,y=Adapt_potential,fill=Mean))+
+  scale_fill_viridis()+
+  geom_tile()+
+  facet_wrap(~Response,scales = "free")+
+  scale_y_log10()+
+  scale_x_log10()+
+  theme_bw()+
+  removeGrid()
+
+response_means<-response_means%>%
+  group_by(Response)%>%
+  mutate(Value_std=scale(Mean))
+
+ggplot(response_means,aes(x=Dispersal,y=Adapt_potential,fill=Value_std))+
+  scale_fill_viridis()+
+  geom_tile()+
+  facet_wrap(~Response)+
+  scale_y_log10(breaks=c(0.0001,0.001,0.01,0.1,1,10))+
+  scale_x_log10(breaks=c(0.0001,0.001,0.01,0.1,1))+
+  theme_bw()+
+  removeGrid()
+ggsave(filename = "./figures/All response.pdf",width = 13,height = 8)
+
+save(response.df,file = "./workspace/Evolving MC.RData")
