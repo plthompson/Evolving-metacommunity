@@ -11,12 +11,12 @@ library(RColorBrewer)
 library(viridis)
 
 #simulation model####
-reps<-3
+reps<-10
 
-species<-15
+species<-20
 patches<-50
 
-Burn_in<-20000
+Burn_in<-50000
 Change_time<-20000
 Tmax<-Burn_in+Change_time
 
@@ -56,8 +56,8 @@ for(j in 1:patches){
   }
 }
 
-V_all<-c(0,0.0001,0.001,0.01,0.1,1,10) #additive genetic variation in thermal optimum
-dispV<-c(0,0.0001,0.001,0.01,0.1,1)
+V_all<-c(0.00001,0.0001,0.001,0.01,0.1,1,10) #additive genetic variation in thermal optimum
+dispV<-c(0.00001,0.0001,0.001,0.01,0.1,1)
 
 for(r in 1:reps){
   a<-matrix(-.15*runif(species*species),species,species)*weight#competitive matrix
@@ -224,27 +224,8 @@ ggplot(response_means,aes(x=Dispersal,y=Mean,group=Adapt_potential, color=Adapt_
   theme_bw()+
   removeGrid()
 
-
-ggplot(filter(response_means, Response=="Regional richness"),aes(x=Dispersal,y=Adapt_potential,fill=Mean))+
-  scale_fill_viridis()+
-  geom_tile()+
-  facet_wrap(~Response,scales = "free")+
-  scale_y_log10()+
-  scale_x_log10()+
-  theme_bw()+
-  removeGrid()
-
-ggplot(filter(response_means, Response=="Local richness"),aes(x=Dispersal,y=Adapt_potential,fill=Mean))+
-  scale_fill_viridis()+
-  geom_tile()+
-  facet_wrap(~Response,scales = "free")+
-  scale_y_log10()+
-  scale_x_log10()+
-  theme_bw()+
-  removeGrid()
-
-ggplot(filter(response_means, Response=="Local biomass"),aes(x=Dispersal,y=Adapt_potential,fill=Mean))+
-  scale_fill_viridis()+
+ggplot(filter(response_means, Response!="Optima change" & Response!="Optima sd"),aes(x=Dispersal,y=Adapt_potential,fill=Mean))+
+  scale_fill_gradient2(low = brewer.pal(5,name = "RdBu")[5],mid = brewer.pal(5,name = "RdBu")[3],high = brewer.pal(5,name = "RdBu")[1],midpoint = 1)+
   geom_tile()+
   facet_wrap(~Response,scales = "free")+
   scale_y_log10()+
@@ -262,7 +243,7 @@ ggplot(filter(response_means, Response=="Optima change"),aes(x=Dispersal,y=Adapt
   removeGrid()
 
 ggplot(filter(response_means, Response=="Optima sd"),aes(x=Dispersal,y=Adapt_potential,fill=Mean))+
-  scale_fill_viridis()+
+  scale_fill_gradient2(low = brewer.pal(5,name = "RdBu")[5],mid = brewer.pal(5,name = "RdBu")[3],high = brewer.pal(5,name = "RdBu")[1],midpoint = 1)+
   geom_tile()+
   facet_wrap(~Response,scales = "free")+
   scale_y_log10()+
@@ -270,27 +251,5 @@ ggplot(filter(response_means, Response=="Optima sd"),aes(x=Dispersal,y=Adapt_pot
   theme_bw()+
   removeGrid()
 
-ggplot(filter(response_means, Response=="Range size"),aes(x=Dispersal,y=Adapt_potential,fill=Mean))+
-  scale_fill_viridis()+
-  geom_tile()+
-  facet_wrap(~Response,scales = "free")+
-  scale_y_log10()+
-  scale_x_log10()+
-  theme_bw()+
-  removeGrid()
 
-response_means<-response_means%>%
-  group_by(Response)%>%
-  mutate(Value_std=scale(Mean))
-
-ggplot(response_means,aes(x=Dispersal,y=Adapt_potential,fill=Value_std))+
-  scale_fill_viridis()+
-  geom_tile()+
-  facet_wrap(~Response)+
-  scale_y_log10(breaks=c(0.0001,0.001,0.01,0.1,1,10))+
-  scale_x_log10(breaks=c(0.0001,0.001,0.01,0.1,1))+
-  theme_bw()+
-  removeGrid()
-ggsave(filename = "./figures/All response.pdf",width = 13,height = 8)
-
-save(response.df,file = "./workspace/Evolving MC.RData")
+save(response.df,file = "./workspace/Evolving MC - change.RData")
