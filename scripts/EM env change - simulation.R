@@ -107,7 +107,7 @@ GenInd2<-function (Flow = NULL, Tij = t(Flow), Import = NULL, Export = NULL,
 environment(GenInd2) <- environment(GenInd)
 
 #simulation model####
-reps<-3
+reps<-10
 
 species<-20
 patches<-50
@@ -153,7 +153,7 @@ for(j in 1:patches){
   }
 }
 
-V_all<-c(0.00001,0.001,0.1,1)#c(0.00001,0.0001,0.001,0.01,0.1,1,10) #additive genetic variation in thermal optimum
+V_all<-c(0.00001,0.0001,0.001,0.01,0.1,1,10) #additive genetic variation in thermal optimum
 dispV<-c(0.00001,0.0001,0.001,0.01,0.1,1)
 
 for(r in 1:reps){
