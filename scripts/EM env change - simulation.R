@@ -355,7 +355,7 @@ response.df$Response<-factor(response.df$Response,levels=c("Local richness","Reg
 
 response_means<-response.df %>% 
   group_by(Response,Dispersal,Adapt_potential) %>% 
-  summarise(Mean=mean(Value, na.rm=T),Lower=quantile(Value,probs = 0.25),Upper = quantile(Value,probs = 0.75))
+  summarise(Mean=mean(Value, na.rm=T),Lower=quantile(Value,probs = 0.25,na.rm=T),Upper = quantile(Value,probs = 0.75,na.rm=T))
 
 ggplot(response_means,aes(x=Dispersal,y=Mean,group=Adapt_potential, color=Adapt_potential))+
   scale_color_viridis(trans="log",breaks=V_all)+
@@ -365,6 +365,7 @@ ggplot(response_means,aes(x=Dispersal,y=Mean,group=Adapt_potential, color=Adapt_
   scale_x_log10()+
   theme_bw()+
   removeGrid()
+ggsave(filename = "./figures/Changing environment/All response.pdf",width = 13,height =8 )
 
 ggplot(filter(response_means, Response!="Optima change" & Response!="Optima sd"),aes(x=Dispersal,y=Adapt_potential,fill=Mean))+
   scale_fill_gradient2(low = brewer.pal(5,name = "RdBu")[5],mid = brewer.pal(5,name = "RdBu")[3],high = brewer.pal(5,name = "RdBu")[1],midpoint = 1)+
@@ -374,6 +375,7 @@ ggplot(filter(response_means, Response!="Optima change" & Response!="Optima sd")
   scale_x_log10()+
   theme_bw()+
   removeGrid()
+ggsave(filename = "./figures/Changing environment/All response tile.pdf",width = 13,height =8 )
 
 ggplot(filter(response_means, Response=="Optima change"),aes(x=Dispersal,y=Adapt_potential,fill=Mean))+
   scale_fill_viridis()+
