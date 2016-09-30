@@ -162,7 +162,7 @@ for(r in 1:reps){
   
   for(V in V_all){
     for(d in dispV){
-      print(paste("rep =",r,", V = ",V,", d = ",d,sep=""))
+      print(paste("rep = ",r,", V = ",V,", d = ",d,sep=""))
       
       #initial species optima means
       z<-matrix(rep(seq(from = env_min,to = env_max_i,length=species),each=patches),ncol=species) #temperature optima
@@ -214,9 +214,8 @@ for(r in 1:reps){
         z<-zt
       }
       
-      matplot(t(N_store[40,,]), type='l', lty=1)
-      matplot(t(z_store[40,,]), type='l', lty=1)
-      
+      #matplot(t(N_store[40,,]), type='l', lty=1)
+      #matplot(t(z_store[40,,]), type='l', lty=1)
       
       # Trait.df<-gather(data.frame(time=1:Tmax,t(apply(z_store,3,colMeans))),key = Species,value = Trait,X1:X15)
       # 
@@ -235,15 +234,14 @@ for(r in 1:reps){
       names(N.df)<-c("patch",1:species)
       N.df<-gather(N.df,key=Species,value=N,-1)
       N.df$Species<-factor(N.df$Species,levels = 1:species,ordered = T)
-
+      
       z.df<-data.frame(patch=1:patches,z)
       names(z.df)<-c("patch",1:species)
       z.df<-gather(z.df,key=Species,value=z,-1)
-
+      
       N.df$Env_trait<-z.df$z
       N.df$z_initial<-c(z_initial)
       N.df$N[N.df$N==0]<-NA
-      
       
       #matplot(t(apply(N_store,3,rowSums)),type='l', lty=1, ylim=c(0,25))
       #matplot(t(apply(N_store,3,colMeans)),type='l', lty=1, ylim=c(0,10))
@@ -252,101 +250,116 @@ for(r in 1:reps){
       
       #plot(Temp,rowSums(N), pch=19)
       
-      ggplot(N.df,aes(x=Species,y=Env_trait,size=N,fill=Env_trait))+
-        geom_point(pch=21)+
-        #scale_fill_gradientn(colors=brewer.pal(9,name = "BuGn"))+
-        scale_fill_viridis(option = "D")+
-        geom_point(aes(x=Species,y=z_initial),col="red",shape=4,size=2)+
-        removeGrid()+
-        theme_bw()
-      # ggsave(filename = paste("./figures/Trait distributions, V = ",V,", d = ",d,".pdf",sep=""),width = 8,height = 6)
-      # 
-      # 
-      ggplot(N.df,aes(x=Species,y=patch,size=N,fill=Env_trait))+
-        geom_point(pch=21)+
-        #scale_fill_gradientn(colors=rev(brewer.pal(9,name = "YlGnBu")))+
-        scale_fill_viridis()+
-        removeGrid()+
-        theme_bw()+
-        ylim(25,50)
-      # ggsave(filename = paste("./figures/Abundance and traits spatial, V = ",V,", d = ",d,".pdf",sep=""),width = 8,height = 6)
-      # 
+      # ggplot(N.df,aes(x=Species,y=Env_trait,size=N,fill=Env_trait))+
+      #   geom_point(pch=21)+
+      #   #scale_fill_gradientn(colors=brewer.pal(9,name = "BuGn"))+
+      #   scale_fill_viridis(option = "D")+
+      #   geom_point(aes(x=Species,y=z_initial),col="red",shape=4,size=2)+
+      #   removeGrid()+
+      #   theme_bw()
+      # # ggsave(filename = paste("./figures/Trait distributions, V = ",V,", d = ",d,".pdf",sep=""),width = 8,height = 6)
+      # # 
+      # # 
+      # ggplot(N.df,aes(x=Species,y=patch,size=N,fill=Env_trait))+
+      #   geom_point(pch=21)+
+      #   #scale_fill_gradientn(colors=rev(brewer.pal(9,name = "YlGnBu")))+
+      #   scale_fill_viridis()+
+      #   removeGrid()+
+      #   theme_bw()+
+      #   ylim(25,50)
+      # # ggsave(filename = paste("./figures/Abundance and traits spatial, V = ",V,", d = ",d,".pdf",sep=""),width = 8,height = 6)
+      # # 
       
-      z_present<-z
-      z_present[N==0]<-NA
-      z_present[is.infinite(z_present)]<-NA
-      
-      z_prechange<-z_store[,,Burn_in]
-      z_prechange[N_store[,,Burn_in]==0]<-NA
-      z_prechange[is.infinite(z_prechange)]<-NA
-      
-      mean_z_change<-rep(NA,species)
-      for(j in 1:species){
-        if(sum(N[,j])>0){
-          mean_z_change[j]<-abs(weighted.mean(z_present[,j],N[,j])-weighted.mean(z_prechange[,j],N_store[,j,Burn_in]))
+      clim_ana<-c("all","no_analogue","analogue")
+      for(ca in clim_ana){
+        if(ca == "all"){
+          patch_select<-1:patches
+        }
+        if(ca == "no_analogue"){
+          patch_select<-Temp > max(Temp_initial)
+        }
+        if(ca == "analogue"){
+          patch_select<-Temp < max(Temp_initial) & Temp > min(Temp_initial)
+        }
+        
+        z_present<-z[patch_select,]
+        z_present[N[patch_select,]==0]<-NA
+        z_present[is.infinite(z_present)]<-NA
+        
+        z_prechange<-z_store[patch_select,,Burn_in]
+        z_prechange[N_store[patch_select,,Burn_in]==0]<-NA
+        z_prechange[is.infinite(z_prechange)]<-NA
+        
+        mean_z_change<-rep(NA,species)
+        for(j in 1:species){
+          if(sum(N[patch_select,j])>0){
+            mean_z_change[j]<-abs(weighted.mean(z_present[,j],N[patch_select,j])-weighted.mean(z_prechange[,j],N_store[patch_select,j,Burn_in]))
+          }
+        }
+        
+        hold<-apply(z_present,2,sd,na.rm=TRUE)
+        
+        #network dissimilarity####
+        Ints<-matrix(1,species,species)
+        diag(Ints)<-0
+        
+        colnames(Ints)<-rownames(Ints)<-paste("s",1:species)
+        
+        cut_value<-0.5
+        
+        nets_pre<-apply(N_store[patch_select,,Burn_in],1,function(x){
+          Int_strength<-abs(Ints*rep(x,each=species))
+          Int_strength[x==0,]<-0
+          Int_strength_cut<-quantile(Int_strength[Int_strength>0],cut_value)#mean(Int_strength[Int_strength>0])
+          Int_strength[Int_strength<Int_strength_cut]<-0
+          Ints2<-1*Int_strength>0
+          hold.df<-t(data.frame(Ints2[x>0,x>0]))
+          net1<-graph.adjacency(hold.df)
+          return(net1) 
+        })
+        
+        nets_post<-apply(N[patch_select,],1,function(x){
+          Int_strength<-abs(Ints*rep(x,each=species))
+          Int_strength[x==0,]<-0
+          Int_strength_cut<-quantile(Int_strength[Int_strength>0],cut_value)#mean(Int_strength[Int_strength>0])
+          Int_strength[Int_strength<Int_strength_cut]<-0
+          Ints2<-1*Int_strength>0
+          hold.df<-t(data.frame(Ints2[x>0,x>0]))
+          net1<-graph.adjacency(hold.df)
+          return(net1) 
+        })
+        
+        regWeb_pre<-metaweb(nets_pre)
+        regWeb_post<-metaweb(nets_post)
+        
+        #network_betaplot(regWeb_post,regWeb_pre)
+        
+        NetInds<-data.frame(GenInd2(get.adjacency(regWeb_post,sparse = F)))/data.frame(GenInd2(get.adjacency(regWeb_pre,sparse = F)))                             
+        
+        
+        response.data1<-data.frame(Dispersal=d,
+                                   Adapt_potential=V,
+                                   Rep=r,
+                                   Patches=ca,
+                                   Value=c(mean(rowSums(N>0))/mean(rowSums(N_store[,,Burn_in]>0)),
+                                           sum(colSums(N)>0)/sum(colSums(N_store[,,Burn_in])>0),
+                                           mean(rowSums(N))/mean(rowSums(N_store[,,Burn_in])),
+                                           mean(colSums(N>0)[colSums(N>0)>0])/mean(colSums(N_store[,,Burn_in]>0)[colSums(N_store[,,Burn_in]>0)>0]),
+                                           mean(apply(z_present,2,sd,na.rm=TRUE),na.rm=TRUE)/mean(apply(z_prechange,2,sd,na.rm=TRUE),na.rm=TRUE),
+                                           mean(mean_z_change, na.rm=TRUE),
+                                           betalink2(regWeb_pre,regWeb_post,bf = B_jack_diss)$WN,
+                                           NetInds$Ltot,
+                                           NetInds$LD,
+                                           NetInds$C,
+                                           NetInds$Cbar
+                                   ),
+                                   Response=c("Local richness","Regional richness","Local biomass","Range size","Optima sd","Optima change","Network beta","Total links","Link density","Connectance","Compartmentalization"))
+        
+        if(d==dispV[1] & V==V_all[1] & r == 1 & ca=="all"){
+          response.df<-response.data1
+        } else {response.df<-rbind(response.df,response.data1)
         }
       }
-
-      hold<-apply(z_present,2,sd,na.rm=TRUE)
-      
-      #network dissimilarity####
-      Ints<-matrix(1,species,species)
-      diag(Ints)<-0
-      
-      colnames(Ints)<-rownames(Ints)<-paste("s",1:species)
-      
-      cut_value<-0
-      
-      nets_pre<-apply(N_store[,,Burn_in],1,function(x){
-        Int_strength<-abs(Ints*rep(x,each=species))
-        Int_strength[x==0,]<-0
-        Int_strength_cut<-quantile(Int_strength[Int_strength>0],cut_value)#mean(Int_strength[Int_strength>0])
-        Int_strength[Int_strength<Int_strength_cut]<-0
-        Ints2<-1*Int_strength>0
-        hold.df<-t(data.frame(Ints2[x>0,x>0]))
-        net1<-graph.adjacency(hold.df)
-        return(net1) 
-      })
-      
-      nets_post<-apply(N,1,function(x){
-        Int_strength<-abs(Ints*rep(x,each=species))
-        Int_strength[x==0,]<-0
-        Int_strength_cut<-quantile(Int_strength[Int_strength>0],cut_value)#mean(Int_strength[Int_strength>0])
-        Int_strength[Int_strength<Int_strength_cut]<-0
-        Ints2<-1*Int_strength>0
-        hold.df<-t(data.frame(Ints2[x>0,x>0]))
-        net1<-graph.adjacency(hold.df)
-        return(net1) 
-      })
-      
-      regWeb_pre<-metaweb(nets_pre)
-      regWeb_post<-metaweb(nets_post)
-      
-      #network_betaplot(regWeb_post,regWeb_pre)
-      
-      NetInds<-data.frame(GenInd2(get.adjacency(regWeb_post,sparse = F)))/data.frame(GenInd2(get.adjacency(regWeb_pre,sparse = F)))                             
-      
-      
-      
-      response.data1<-data.frame(Dispersal=d,
-                                 Adapt_potential=V,
-                                 Rep=r,
-                                 Value=c(mean(rowSums(N>0))/mean(rowSums(N_store[,,Burn_in]>0)),
-                                         sum(colSums(N)>0)/sum(colSums(N_store[,,Burn_in])>0),
-                                         mean(rowSums(N))/mean(rowSums(N_store[,,Burn_in])),
-                                         mean(colSums(N>0)[colSums(N>0)>0])/mean(colSums(N_store[,,Burn_in]>0)[colSums(N_store[,,Burn_in]>0)>0]),
-                                         mean(apply(z_present,2,sd,na.rm=TRUE),na.rm=TRUE)/mean(apply(z_prechange,2,sd,na.rm=TRUE),na.rm=TRUE),
-                                         mean(mean_z_change, na.rm=TRUE),
-                                         betalink2(regWeb_pre,regWeb_post,bf = B_jack_diss)$WN,
-                                         NetInds$Ltot,
-                                         NetInds$LD,
-                                         NetInds$C,
-                                         NetInds$Cbar
-                                         ),
-                                 Response=c("Local richness","Regional richness","Local biomass","Range size","Optima sd","Optima change","Network beta","Total links","Link density","Connectance","Compartmentalization"))
-      if(d==dispV[1] & V==V_all[1] & r == 1){
-        response.df<-response.data1
-      } else {response.df<-rbind(response.df,response.data1)}
     }
   }
 }
