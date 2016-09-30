@@ -107,7 +107,7 @@ GenInd2<-function (Flow = NULL, Tij = t(Flow), Import = NULL, Export = NULL,
 environment(GenInd2) <- environment(GenInd)
 
 #simulation model####
-reps<-10
+reps<-5
 
 species<-20
 patches<-50
@@ -341,10 +341,10 @@ for(r in 1:reps){
                                    Adapt_potential=V,
                                    Rep=r,
                                    Patches=ca,
-                                   Value=c(mean(rowSums(N>0))/mean(rowSums(N_store[,,Burn_in]>0)),
-                                           sum(colSums(N)>0)/sum(colSums(N_store[,,Burn_in])>0),
-                                           mean(rowSums(N))/mean(rowSums(N_store[,,Burn_in])),
-                                           mean(colSums(N>0)[colSums(N>0)>0])/mean(colSums(N_store[,,Burn_in]>0)[colSums(N_store[,,Burn_in]>0)>0]),
+                                   Value=c(mean(rowSums(N[patch_select,]>0))/mean(rowSums(N_store[patch_select,,Burn_in]>0)),
+                                           sum(colSums(N[patch_select,])>0)/sum(colSums(N_store[patch_select,,Burn_in])>0),
+                                           mean(rowSums(N[patch_select,]))/mean(rowSums(N_store[patch_select,,Burn_in])),
+                                           mean(colSums(N[patch_select,]>0)[colSums(N[patch_select,]>0)>0])/mean(colSums(N_store[patch_select,,Burn_in]>0)[colSums(N_store[patch_select,,Burn_in]>0)>0]),
                                            mean(apply(z_present,2,sd,na.rm=TRUE),na.rm=TRUE)/mean(apply(z_prechange,2,sd,na.rm=TRUE),na.rm=TRUE),
                                            mean(mean_z_change, na.rm=TRUE),
                                            betalink2(regWeb_pre,regWeb_post,bf = B_jack_diss)$WN,
@@ -367,46 +367,52 @@ for(r in 1:reps){
 response.df$Response<-factor(response.df$Response,levels=c("Local richness","Regional richness","Local biomass","Range size","Optima sd","Optima change","Network beta","Total links","Link density","Connectance","Compartmentalization"),ordered = TRUE)
 
 response_means<-response.df %>% 
-  group_by(Response,Dispersal,Adapt_potential) %>% 
+  group_by(Response,Dispersal,Adapt_potential,Patches) %>% 
   summarise(Mean=mean(Value, na.rm=T),Lower=quantile(Value,probs = 0.25,na.rm=T),Upper = quantile(Value,probs = 0.75,na.rm=T))
 
-ggplot(response_means,aes(x=Dispersal,y=Mean,group=Adapt_potential, color=Adapt_potential))+
+ggplot(filter(response_means,
+              Response=="Local richness" |
+                Response=="Regional richness" |
+                Response=="Local biomass" |
+                Response=="Range size")
+       ,aes(x=Dispersal,y=Mean,group=Adapt_potential, color=Adapt_potential))+
   scale_color_viridis(trans="log",breaks=V_all)+
   geom_point()+
   geom_line()+
-  facet_wrap(~Response,scales = "free")+
+  facet_grid(Response~Patches,scales = "free_y")+
   scale_x_log10()+
   theme_bw()+
   removeGrid()
-ggsave(filename = "./figures/Changing environment/All response.pdf",width = 13,height =8 )
+ggsave(filename = "./figures/Changing environment/Biodiversity function.pdf",width = 13,height =8 )
 
-ggplot(filter(response_means, Response!="Optima change" & Response!="Optima sd"),aes(x=Dispersal,y=Adapt_potential,fill=Mean))+
-  scale_fill_gradient2(low = brewer.pal(5,name = "RdBu")[5],mid = brewer.pal(5,name = "RdBu")[3],high = brewer.pal(5,name = "RdBu")[1],midpoint = 1)+
-  geom_tile()+
-  facet_wrap(~Response,scales = "free")+
-  scale_y_log10()+
+ggplot(filter(response_means,
+              Response=="Optima sd" |
+                Response=="Optima change")
+       ,aes(x=Dispersal,y=Mean,group=Adapt_potential, color=Adapt_potential))+
+  scale_color_viridis(trans="log",breaks=V_all)+
+  geom_point()+
+  geom_line()+
+  facet_grid(Response~Patches,scales = "free_y")+
   scale_x_log10()+
   theme_bw()+
   removeGrid()
-ggsave(filename = "./figures/Changing environment/All response tile.pdf",width = 13,height =8 )
+ggsave(filename = "./figures/Changing environment/Adaptation.pdf",width = 13,height =8 )
 
-ggplot(filter(response_means, Response=="Optima change"),aes(x=Dispersal,y=Adapt_potential,fill=Mean))+
-  scale_fill_viridis()+
-  geom_tile()+
-  facet_wrap(~Response,scales = "free")+
-  scale_y_log10()+
+ggplot(filter(response_means,
+              Response=="Network beta" |
+                Response=="Total links" |
+                Response=="Link density" |
+                Response=="Connectance" |
+                Response=="Compartmentalization")
+       ,aes(x=Dispersal,y=Mean,group=Adapt_potential, color=Adapt_potential))+
+  scale_color_viridis(trans="log",breaks=V_all)+
+  geom_point()+
+  geom_line()+
+  facet_grid(Response~Patches,scales = "free_y")+
   scale_x_log10()+
   theme_bw()+
   removeGrid()
-
-ggplot(filter(response_means, Response=="Optima sd"),aes(x=Dispersal,y=Adapt_potential,fill=Mean))+
-  scale_fill_gradient2(low = brewer.pal(5,name = "RdBu")[5],mid = brewer.pal(5,name = "RdBu")[3],high = brewer.pal(5,name = "RdBu")[1],midpoint = 1)+
-  geom_tile()+
-  facet_wrap(~Response,scales = "free")+
-  scale_y_log10()+
-  scale_x_log10()+
-  theme_bw()+
-  removeGrid()
+ggsave(filename = "./figures/Changing environment/Network change.pdf",width = 13,height =8 )
 
 
 save(response.df,file = "./workspace/Evolving MC - change.RData")
