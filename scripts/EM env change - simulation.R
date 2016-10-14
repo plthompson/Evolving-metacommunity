@@ -12,99 +12,9 @@ library(viridis)
 library(igraph)
 library(betalink)
 library(NetIndices)
+library(igraph)
 
-
-#functions####
-B_jack_diss<-function(pm){
-  with(pm, {
-    (b+c)/(a+b+c)
-  })}
-
-B_jack_diss_gains<-function(pm){
-  with(pm, {
-    (c)/(a+b+c)
-  })}
-
-B_jack_diss_loss<-function(pm){
-  with(pm, {
-    (b)/(a+b+c)
-  })}
-
-betalink2<-function (n1, n2, bf = B01) 
-{
-  v1 <- igraph::V(n1)$name
-  v2 <- igraph::V(n2)$name
-  vs <- v1[v1 %in% v2]
-  beta_S <- bf(betapart(v1, v2))
-  e1 <- plyr::aaply(igraph::get.edgelist(n1), 1, function(x) stringr::str_c(x, 
-                                                                            collapse = "--", paste = "_"))
-  e2 <- plyr::aaply(igraph::get.edgelist(n2), 1, function(x) stringr::str_c(x, 
-                                                                            collapse = "--", paste = "_"))
-  beta_WN <- bf(betapart(e1, e2))
-  if (length(vs) >= 2) {
-    sn1 <- igraph::induced.subgraph(n1, which(igraph::V(n1)$name %in% 
-                                                vs))
-    sn2 <- igraph::induced.subgraph(n2, which(igraph::V(n2)$name %in% 
-                                                vs))
-    se1 <- plyr::aaply(igraph::get.edgelist(sn1), 1, function(x) stringr::str_c(x, 
-                                                                                collapse = "--", paste = "_"))
-    se2 <- plyr::aaply(igraph::get.edgelist(sn2), 1, function(x) stringr::str_c(x, 
-                                                                                collapse = "--", paste = "_"))
-    beta_OS <- bf(betapart(se1, se2))
-    beta_ST <- beta_WN - beta_OS
-  }
-  else {
-    beta_OS <- NaN
-    beta_ST <- NaN
-  }
-  return(list(S = beta_S, OS = beta_OS, WN = beta_WN, ST = beta_ST))
-}
-
-GenInd2<-function (Flow = NULL, Tij = t(Flow), Import = NULL, Export = NULL, 
-                   tol = 0) 
-{
-  if(length(Flow)==0){
-    list(N = 0, T.. = 0, TST = 0, Lint = 0, 
-         Ltot = 0, LD = 0, C = 0, Tijbar = 0, 
-         TSTbar = 0, Cbar = 0)
-  } else{
-    N <- InternalNetwork(Tij, Import, Export)
-    RateComp <- N$FlowToC - N$FlowFromC
-    ncTij <- ncol(Tij)
-    nrTij <- nrow(Tij)
-    ncomp <- ncol(N$Tint)
-    compNames <- rownames(N$Tint)
-    intlinks <- length(which(N$Tint > tol))
-    links <- length(which(Tij > tol))
-    LD <- links/ncomp
-    ExportSum <- sum(N$FlowTo[N$export])
-    ImportSum <- sum(N$FlowFrom[N$import])
-    Throughflow <- sum(N$Tint) + ImportSum - sum(RateComp[RateComp < 
-                                                            0])
-    Throughput <- sum(Tij)
-    Avthrflow <- Throughflow/ncomp
-    Connectance <- intlinks/ncomp/(ncomp - 1)
-    Avlinkweight <- Throughput/links
-    linkmat <- N$Tint
-    linkmat[linkmat > 0] <- 1
-    Cij <- matrix(nrow = ncomp, ncol = ncomp, 0)
-    for (i in 1:ncomp) {
-      int_i <- union(which(linkmat[i, ] > 0), which(linkmat[, 
-                                                            i] > 0))
-      for (j in 1:ncomp) {
-        int_j <- union(which(linkmat[j, ] > 0), which(linkmat[, 
-                                                              j] > 0))
-        sect <- intersect(int_i, int_j)
-        uni <- union(int_i, int_j)
-        Cij[i, j] <- length(sect)/length(uni)
-      }
-    }
-    Compart <- (sum(Cij) - ncomp)/ncomp/(ncomp - 1)
-    list(N = ncomp, T.. = Throughput, TST = Throughflow, Lint = intlinks, 
-         Ltot = links, LD = LD, C = Connectance, Tijbar = Avlinkweight, 
-         TSTbar = Avthrflow, Cbar = Compart)
-  }}
-environment(GenInd2) <- environment(GenInd)
+source("./functions/EM env change functions.R")
 
 #simulation model####
 reps<-5
@@ -133,25 +43,11 @@ weight<-1/(species/2)
 sig_p<-5 #rise in performance as temp increases
 zmax<-0.2 #distance from temp opt to zero growth
 
-T_perform<-function(Temp,z,zmax,sig_p){
-  Tmat<-matrix(Temp,length(Temp),species) 
-  wT<-exp(-((Tmat-z)/2*sig_p)^2)
-  #wT2<-1-((Tmat-z)/(z-z+zmax))^2
-  #wT[Tmat>=z]<-wT2[Tmat>=z]
-  wT[wT<0]<-0
-  return(wT)
-}
+edges<-rep(1:patches,each=2)
+edges<-c(edges[-1],edges[1])
+graph<-make_graph(edges, directed = FALSE)
+dist_mat<-distances(graph)
 
-disp_matrix<-matrix(0,patches,patches)
-for(j in 1:patches){
-  if(j<patches){
-    disp_matrix[j,j+1]<-0.5
-    disp_matrix[j+1,j]<-0.5
-  } else {
-    disp_matrix[j,1]<-0.5
-    disp_matrix[1,j]<-0.5
-  }
-}
 
 V_all<-c(0.00001,0.0001,0.001,0.01,0.1,1,10) #additive genetic variation in thermal optimum
 dispV<-c(0.00001,0.0001,0.001,0.01,0.1,1)
@@ -159,6 +55,15 @@ dispV<-c(0.00001,0.0001,0.001,0.01,0.1,1)
 for(r in 1:reps){
   a<-matrix(-.15*runif(species*species),species,species)*weight#competitive matrix
   diag(a)<--0.02
+  
+  dd<-rnorm(n = species,mean=0.5,sd=0.1)
+  disp_array<-array(NA,dim=c(patches,patches,species))
+  for(s in 1:species){
+    disp_matrix<-exp(-dd[s]*dist_mat)
+    diag(disp_matrix)<-0
+    disp_matrix<-disp_matrix/rowSums(disp_matrix)
+    disp_array[,,s]<-disp_matrix
+  }
   
   for(V in V_all){
     for(d in dispV){
@@ -198,7 +103,7 @@ for(r in 1:reps){
         zt<-z+(Nt1*V*z_change*z_up_down)
         
         gene_matrix<-d*disp_matrix
-        diag(gene_matrix)<-1-(d*1/(patches-1))*(patches-1)
+        diag(gene_matrix)<-1-d#1-(d*1/(patches-1))*(patches-1)
         
         Nt<-Nt1-Nt1*d+d*disp_matrix%*%Nt1
         
