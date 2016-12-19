@@ -12,12 +12,11 @@ library(viridis)
 library(igraph)
 library(betalink)
 library(NetIndices)
-library(igraph)
 
 source("./functions/EM env change functions.R")
 
 #simulation model####
-reps<-5
+reps<-1
 
 species<-20
 patches<-50
@@ -49,25 +48,31 @@ graph<-make_graph(edges, directed = FALSE)
 dist_mat<-distances(graph)
 
 
-V_all<-c(0.00001,0.0001,0.001,0.01,0.1,1,10) #additive genetic variation in thermal optimum
-dispV<-c(0.00001,0.0001,0.001,0.01,0.1,1)
+V_all<-c(0.00001,0.0001,0.001,0.005,0.01,0.1,1) #additive genetic variation in thermal optimum
+dispV<-c(0.00001,0.0001,0.001,0.01,0.1,0.5)
 
 for(r in 1:reps){
   a<-matrix(-.15*runif(species*species),species,species)*weight#competitive matrix
   diag(a)<--0.02
   
-  dd<-rnorm(n = species,mean=0.5,sd=0.1)
-  disp_array<-array(NA,dim=c(patches,patches,species))
-  for(s in 1:species){
-    disp_matrix<-exp(-dd[s]*dist_mat)
-    diag(disp_matrix)<-0
-    disp_matrix<-disp_matrix/rowSums(disp_matrix)
-    disp_array[,,s]<-disp_matrix
-  }
+  dd<-0.5#rnorm(n = species,mean=0.5,sd=0.1)
+  disp_matrix<-exp(-dd*dist_mat)
+  diag(disp_matrix)<-0
+  disp_matrix<-disp_matrix/rowSums(disp_matrix)
+  # disp_array<-array(NA,dim=c(patches,patches,species))
+  # for(s in 1:species){
+  #   disp_matrix<-exp(-dd[s]*dist_mat)
+  #   diag(disp_matrix)<-0
+  #   disp_matrix<-disp_matrix/rowSums(disp_matrix)
+  #   disp_array[,,s]<-disp_matrix
+  # }
   
   for(V in V_all){
+    V_species<-rnorm(n = species,mean = V,sd=V*0.1)
     for(d in dispV){
       print(paste("rep = ",r,", V = ",V,", d = ",d,sep=""))
+      
+      dV<-rnorm(n = species,mean = d,sd=d*0.1)
       
       #initial species optima means
       z<-matrix(rep(seq(from = env_min,to = env_max_i,length=species),each=patches),ncol=species) #temperature optima
@@ -78,7 +83,6 @@ for(r in 1:reps){
       z_store<-array(NA,dim = c(patches,species,Tmax))
       N_store<-array(NA,dim = c(patches,species,Tmax))
       for(i in 1:Tmax){
-        
         Temp<-Temp_initial+Temp_changeV[i]
         
         g<-exp(
@@ -100,14 +104,12 @@ for(r in 1:reps){
         z_change[z_down>z_up]<-z_down[z_down>z_up]
         z_change[z_change<0]<-0
         
-        zt<-z+(Nt1*V*z_change*z_up_down)
+        zt<-z+(rep(V_species,each=patches)*z_change*z_up_down)#+rnorm(species*patches,mean=0,sd=0.0001)
         
-        gene_matrix<-d*disp_matrix
-        diag(gene_matrix)<-1-d#1-(d*1/(patches-1))*(patches-1)
         
-        Nt<-Nt1-Nt1*d+d*disp_matrix%*%Nt1
+        Nt<-Nt1-Nt1*rep(dV,each=patches)+rep(dV,each=patches)*disp_matrix%*%Nt1 #dispersal
         
-        zt1<-(gene_matrix%*%(zt*Nt1))/Nt
+        zt1<-(disp_matrix%*%(zt*Nt1*rep(dV,each=patches))+zt*Nt1*(1-rep(dV,each=patches)))/Nt #gene flow
         zt1[is.na(zt1)]<-zt[is.na(zt1)]
         zt<-zt1
         
@@ -122,7 +124,7 @@ for(r in 1:reps){
       #matplot(t(N_store[40,,]), type='l', lty=1)
       #matplot(t(z_store[40,,]), type='l', lty=1)
       
-      # Trait.df<-gather(data.frame(time=1:Tmax,t(apply(z_store,3,colMeans))),key = Species,value = Trait,X1:X15)
+      # Trait.df<-gather(data.frame(time=1:Tmax,t(apply(z_store,3,colMeans))),key = Species,value = Trait,X1:X20)
       # 
       # Trait.df$max<-c(t(apply(z_store,3,function(x){apply(x,2,max)})))
       # Trait.df$min<-c(t(apply(z_store,3,function(x){apply(x,2,min)})))
@@ -280,8 +282,8 @@ ggplot(filter(response_means,
                 Response=="Regional richness" |
                 Response=="Local biomass" |
                 Response=="Range size")
-       ,aes(x=Dispersal,y=Mean,group=Adapt_potential, color=Adapt_potential))+
-  scale_color_viridis(trans="log",breaks=V_all)+
+       ,aes(x=Dispersal,y=Mean,group=Adapt_potential, color=as.character(Adapt_potential)))+
+  #scale_color_viridis(trans="log",breaks=V_all)+
   geom_point()+
   geom_line()+
   facet_grid(Response~Patches,scales = "free_y")+
@@ -293,8 +295,8 @@ ggsave(filename = "./figures/Changing environment/Biodiversity function.pdf",wid
 ggplot(filter(response_means,
               Response=="Optima sd" |
                 Response=="Optima change")
-       ,aes(x=Dispersal,y=Mean,group=Adapt_potential, color=Adapt_potential))+
-  scale_color_viridis(trans="log",breaks=V_all)+
+       ,aes(x=Dispersal,y=Mean,group=Adapt_potential, color=as.character(Adapt_potential)))+
+  #scale_color_viridis(trans="log",breaks=V_all)+
   geom_point()+
   geom_line()+
   facet_grid(Response~Patches,scales = "free_y")+
