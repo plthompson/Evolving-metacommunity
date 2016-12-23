@@ -12,7 +12,7 @@ source("./functions/EM env change functions.r")
 
 #variables to contrast####
 reps<-5
-V_all<-c(0.001,0.01,0.1,1,10) #additive genetic variation in thermal optimum
+V_all<-c(0.001,0.01,0.1,1,10,100) #additive genetic variation in thermal optimum
 dispV<-c(0.00001,0.0001,0.001,0.01,0.1,0.5)
 
 
@@ -151,113 +151,30 @@ for(r in 1:reps){
         geom_point()+
         scale_color_viridis()
       
-      clim_ana<-c("all","no_analogue","analogue")
-      for(ca in clim_ana){
-        if(ca == "all"){
-          patch_select<-1:patches
-        }
-        if(ca == "no_analogue"){
-          patch_select<-Temp > max(Temp_I)
-        }
-        if(ca == "analogue"){
-          patch_select<-Temp < max(Temp_I) & Temp > min(Temp_I)
-        }
-        
-        z_present<-zmat[,patch_select]
-        z_present[N[,patch_select]==0]<-NA
-        z_present[is.infinite(z_present)]<-NA
-        
-        z_prechange<-Zsave[,patch_select,burn_in]
-        z_prechange[Nsave[,patch_select,burn_in]==0]<-NA
-        z_prechange[is.infinite(z_prechange)]<-NA
-        
-        mean_z_change<-rep(NA,species)
-        for(j in 1:species){
-          if(sum(N[j,patch_select])>0){
-            mean_z_change[j]<-abs(weighted.mean(z_present[j,],N[j,patch_select])-weighted.mean(z_prechange[j,],Nsave[j,patch_select,burn_in]))
-          }
-        }
-        
-        hold<-apply(z_present,1,sd,na.rm=TRUE)
-        
-        #network dissimilarity####
-        Ints<-matrix(1,species,species)
-        diag(Ints)<-0
-        
-        colnames(Ints)<-rownames(Ints)<-paste("s",1:species)
-        
-        cut_value<-0.5
-        
-        nets_pre<-apply(Nsave[,patch_select,burn_in],2,function(x){
-          Int_strength<-abs(Ints*rep(x,each=species))
-          Int_strength[x==0,]<-0
-          Int_strength_cut<-quantile(Int_strength[Int_strength>0],cut_value)#mean(Int_strength[Int_strength>0])
-          Int_strength[Int_strength<Int_strength_cut]<-0
-          Ints2<-1*Int_strength>0
-          hold.df<-t(data.frame(Ints2[x>0,x>0]))
-          net1<-graph.adjacency(hold.df)
-          return(net1) 
-        })
-        
-        nets_post<-apply(N[,patch_select],2,function(x){
-          Int_strength<-abs(Ints*rep(x,each=species))
-          Int_strength[x==0,]<-0
-          Int_strength_cut<-quantile(Int_strength[Int_strength>0],cut_value)#mean(Int_strength[Int_strength>0])
-          Int_strength[Int_strength<Int_strength_cut]<-0
-          Ints2<-1*Int_strength>0
-          hold.df<-t(data.frame(Ints2[x>0,x>0]))
-          net1<-graph.adjacency(hold.df)
-          return(net1) 
-        })
-        
-        regWeb_pre<-metaweb(nets_pre)
-        regWeb_post<-metaweb(nets_post)
-        
-        #network_betaplot(regWeb_post,regWeb_pre)
-        
-        NetInds<-data.frame(GenInd2(get.adjacency(regWeb_post,sparse = F)))/data.frame(GenInd2(get.adjacency(regWeb_pre,sparse = F)))                             
-        
-        
-        response.data1<-data.frame(Dispersal=disp,
-                                   Adapt_potential=V,
-                                   Rep=r,
-                                   Patches=ca,
-                                   Value=c(mean(colSums(N[,patch_select]>0))/mean(colSums(Nsave[,patch_select,burn_in]>0)),
-                                           sum(rowSums(N[,patch_select])>0)/sum(rowSums(Nsave[,patch_select,burn_in])>0),
-                                           mean(colSums(N[,patch_select]))/mean(colSums(Nsave[,patch_select,burn_in])),
-                                           mean(rowSums(N[,patch_select]>0)[rowSums(N[,patch_select]>0)>0])/mean(rowSums(Nsave[,patch_select,burn_in]>0)[rowSums(Nsave[,patch_select,burn_in]>0)>0]),
-                                           mean(apply(z_present,1,sd,na.rm=TRUE),na.rm=TRUE)/mean(apply(z_prechange,1,sd,na.rm=TRUE),na.rm=TRUE),
-                                           mean(mean_z_change, na.rm=TRUE),
-                                           betalink2(regWeb_pre,regWeb_post,bf = B_jack_diss)$WN,
-                                           NetInds$Ltot,
-                                           NetInds$LD,
-                                           NetInds$C,
-                                           NetInds$Cbar
-                                   ),
-                                   Response=c("Local richness","Regional richness","Local biomass","Range size","Optima sd","Optima change","Network beta","Total links","Link density","Connectance","Compartmentalization"))
-        
-        if(disp==dispV[1] & V==V_all[1] & r == 1 & ca=="all"){
-          response.df<-response.data1
-        } else {response.df<-rbind(response.df,response.data1)
-        }
+      hold<-calc_net_change(N = N, N1 = Nsave[,,burn_in], zmat = zmat, z1 = Zsave[,,burn_in])
+      if(disp==dispV[1] & r == 1 & V == V_all[1]){
+        results.df<-hold
+      } else {
+        results.df<-rbind(results.df,hold)
       }
     }
   }
 }
 
 
-response.df$Response<-factor(response.df$Response,levels=c("Local richness","Regional richness","Local biomass","Range size","Optima sd","Optima change","Network beta","Total links","Link density","Connectance","Compartmentalization"),ordered = TRUE)
+results.df$Response<-factor(results.df$Response,levels=c("Local S","Regional S","Local biomass","Range size","Optima sd","Optima change","Network simmilarity","Total links","Link density","Connectance","Compartmentalization"),ordered = TRUE)
 
-response_means<-response.df %>% 
-  group_by(Response,Dispersal,Adapt_potential,Patches) %>% 
+response_means<-results.df %>% 
+  group_by(Response,Dispersal,Genetic_variation,Patches,Trophic) %>% 
   summarise(Mean=mean(Value, na.rm=T),Lower=quantile(Value,probs = 0.25,na.rm=T),Upper = quantile(Value,probs = 0.75,na.rm=T))
 
 ggplot(filter(response_means,
-              Response=="Local richness" |
-                Response=="Regional richness" |
+              Response=="Local S" |
+                Response=="Regional S" |
                 Response=="Local biomass" |
-                Response=="Range size")
-       ,aes(x=Dispersal,y=Mean,group=Adapt_potential, color=as.character(Adapt_potential),fill=as.character(Adapt_potential)))+
+                Response=="Range size",
+              Trophic=="all")
+       ,aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation),fill=as.character(Genetic_variation)))+
   #scale_color_viridis(trans="log",breaks=V_all)+
   geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=0.2,color=NA)+
   geom_point()+
@@ -269,9 +186,58 @@ ggplot(filter(response_means,
 #ggsave(filename = "./figures/Changing environment/Biodiversity function.pdf",width = 13,height =8 )
 
 ggplot(filter(response_means,
+              Response=="Local S" |
+                Response=="Regional S" |
+                Response=="Local biomass" |
+                Response=="Range size",
+              Trophic=="plant")
+       ,aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation),fill=as.character(Genetic_variation)))+
+  #scale_color_viridis(trans="log",breaks=V_all)+
+  geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=0.2,color=NA)+
+  geom_point()+
+  geom_line()+
+  facet_grid(Response~Patches,scales = "free_y")+
+  scale_x_log10()+
+  theme_bw()+
+  removeGrid()
+
+ggplot(filter(response_means,
+              Response=="Local S" |
+                Response=="Regional S" |
+                Response=="Local biomass" |
+                Response=="Range size",
+              Trophic=="herbivore")
+       ,aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation),fill=as.character(Genetic_variation)))+
+  #scale_color_viridis(trans="log",breaks=V_all)+
+  geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=0.2,color=NA)+
+  geom_point()+
+  geom_line()+
+  facet_grid(Response~Patches,scales = "free_y")+
+  scale_x_log10()+
+  theme_bw()+
+  removeGrid()
+
+ggplot(filter(response_means,
+              Response=="Local S" |
+                Response=="Regional S" |
+                Response=="Local biomass" |
+                Response=="Range size",
+              Trophic=="predator")
+       ,aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation),fill=as.character(Genetic_variation)))+
+  #scale_color_viridis(trans="log",breaks=V_all)+
+  geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=0.2,color=NA)+
+  geom_point()+
+  geom_line()+
+  facet_grid(Response~Patches,scales = "free_y")+
+  scale_x_log10()+
+  theme_bw()+
+  removeGrid()
+
+ggplot(filter(response_means,
               Response=="Optima sd" |
-                Response=="Optima change")
-       ,aes(x=Dispersal,y=Mean,group=Adapt_potential, color=as.character(Adapt_potential)))+
+                Response=="Optima change",
+              Trophic=="all")
+       ,aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation)))+
   #scale_color_viridis(trans="log",breaks=V_all)+
   geom_point()+
   geom_line()+
@@ -282,13 +248,55 @@ ggplot(filter(response_means,
 #ggsave(filename = "./figures/Changing environment/Adaptation.pdf",width = 13,height =8 )
 
 ggplot(filter(response_means,
-              Response=="Network beta" |
+              Response=="Optima sd" |
+                Response=="Optima change",
+              Trophic=="plant")
+       ,aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation)))+
+  #scale_color_viridis(trans="log",breaks=V_all)+
+  geom_point()+
+  geom_line()+
+  facet_grid(Response~Patches,scales = "free_y")+
+  scale_x_log10()+
+  theme_bw()+
+  removeGrid()
+
+ggplot(filter(response_means,
+              Response=="Optima sd" |
+                Response=="Optima change",
+              Trophic=="herbivore")
+       ,aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation)))+
+  #scale_color_viridis(trans="log",breaks=V_all)+
+  geom_point()+
+  geom_line()+
+  facet_grid(Response~Patches,scales = "free_y")+
+  scale_x_log10()+
+  theme_bw()+
+  removeGrid()
+
+ggplot(filter(response_means,
+              Response=="Optima sd" |
+                Response=="Optima change",
+              Trophic=="predator")
+       ,aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation)))+
+  #scale_color_viridis(trans="log",breaks=V_all)+
+  geom_point()+
+  geom_line()+
+  facet_grid(Response~Patches,scales = "free_y")+
+  scale_x_log10()+
+  theme_bw()+
+  removeGrid()
+
+
+ggplot(filter(response_means,
+              Response=="Network simmilarity" |
                 Response=="Total links" |
                 Response=="Link density" |
                 Response=="Connectance" |
-                Response=="Compartmentalization")
-       ,aes(x=Dispersal,y=Mean,group=Adapt_potential, color=as.character(Adapt_potential)))+
+                Response=="Compartmentalization",
+              Trophic== "all")
+       ,aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation),fill=as.character(Genetic_variation)))+
   #scale_color_viridis(trans="log",breaks=V_all)+
+  geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=0.2,color=NA)+
   geom_point()+
   geom_line()+
   facet_grid(Response~Patches,scales = "free_y")+
