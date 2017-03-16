@@ -159,7 +159,15 @@ calc_net_change<-function(N,N1,zmat,z1){
   
   NetInds<-data.frame()
   for(i in BC_dist.df$Patch){
-    NetInds<-rbind(NetInds,data.frame(GenInd2(get.adjacency(nets_post[[i]],attr = "weight",sparse = F)))/data.frame(GenInd2(get.adjacency(nets_pre[[filter(BC_dist.df,Patch == i)$Closest_patch]],attr = "weight",sparse = F))))
+    if(length(E(nets_pre[[filter(BC_dist.df,Patch == i)$Closest_patch[1]]]))>0){
+      if(length(E(nets_post[[i]]))>0){
+        NetInds<-rbind(NetInds,data.frame(GenInd2(get.adjacency(nets_post[[i]],attr = "weight",sparse = F)))/data.frame(GenInd2(get.adjacency(nets_pre[[filter(BC_dist.df,Patch == i)$Closest_patch[1]]],attr = "weight",sparse = F))))
+      } else {
+        NetInds<-rbind(NetInds,0/data.frame(GenInd2(get.adjacency(nets_pre[[filter(BC_dist.df,Patch == i)$Closest_patch]],attr = "weight",sparse = F))))
+      }
+    } else{
+      NetInds<-rbind(NetInds,NA)
+    }
   }
   
   BC_dist.df<-bind_cols(BC_dist.df,NetInds)
