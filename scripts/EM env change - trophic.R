@@ -10,7 +10,7 @@ library(vegan)
 source("./functions/EM env change functions.r")
 
 #variables to contrast####
-reps<-2
+reps<-10
 V_all<-c(0.001,0.01,0.1,1,10,100) #additive genetic variation in thermal optimum
 dispV<-c(0.00001,0.0001,0.001,0.01,0.1,0.5)
 
@@ -333,5 +333,5 @@ ggplot(filter(response_means,
   theme_bw()+
   removeGrid()
 
-#save(response.df,file = "./workspace/Evolving MC - change.RData")
+save(results.df,file = "./workspace/Evolving MC - change.RData")
 
