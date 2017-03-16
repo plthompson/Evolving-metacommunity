@@ -1,9 +1,7 @@
 #packages####
-library(dplyr)
-library(ggplot2)
 library(ggExtra)
 library(igraph)
-library(tidyr)
+library(tidyverse)
 library(viridis)
 library(betalink)
 library(NetIndices)
@@ -65,8 +63,6 @@ for(r in 1:reps){
   diag(BB)<-bdiag1
   diag(BB[(nplants+nherb+1):species,(nplants+nherb+1):species])<-bdiag2
   BB=weight*BB
-  
-  BB
   
   C3<-c(rep(0.2,nplants),rep(0,species-nplants))
   
@@ -305,42 +301,5 @@ ggplot(filter(response_means,
   removeGrid()
 #ggsave(filename = "./figures/Changing environment/Network change.pdf",width = 13,height =8 )
 
-
 #save(response.df,file = "./workspace/Evolving MC - change.RData")
 
-
-
-trophic_abundance<-data.frame(N=c(N),Patch=rep(1:patches,each=species),T_level=trophicV) %>% 
-  group_by(T_level,Patch) %>% 
-  summarise(Abundance=sum(N),S=sum(N>0))
-
-ggplot(trophic_abundance,aes(x=Patch,y=Abundance,group=T_level,color=T_level))+
-  geom_line()
-
-ggplot(trophic_abundance,aes(x=Patch,y=S,group=T_level,color=T_level))+
-  geom_line()
-
-species_abundance<-data.frame(N=c(N),Patch=rep(1:patches,each=species),T_level=trophicV,Species=1:species)
-
-ggplot(species_abundance,aes(x=Patch,y=N,group=Species,color=T_level))+
-  geom_line()
-
-filled.contour(Nsave[,,burn_in])
-filled.contour(N)
-
-data.frame(N=c(N),Patch=rep(1:patches,each=species),T_level=trophicV) %>% 
-  filter(N>0) %>% 
-  group_by(T_level) %>% 
-  summarise(N=mean(N))
-
-# plot(colSums(Nsave[,,burn_in]>0))
-# plot(colSums(N>0))
-# plot(rowSums(N>0),col=trophicV,pch=19)
-# 
-# plot(rowSums(Nsave[,,burn_in]),col=trophicV,pch=19)
-# plot(rowSums(N),col=trophicV,pch=19)
-# 
-# 
-# matplot(t(Nsave[,25,]),type='l',col=trophicV)
-# matplot(t(Nsave[,2,]),type='l',col=trophicV)
-# matplot(t(Nsave[,15,]),type='l',col=trophicV)

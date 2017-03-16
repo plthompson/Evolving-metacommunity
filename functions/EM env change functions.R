@@ -120,6 +120,63 @@ Env_perform2<-function(env,z,zmax=NA,sig_p){
 }
 
 calc_net_change<-function(N,N1,zmat,z1){
+  #network dissimilarity####
+  Ints<-BB
+  diag(Ints)<-0
+  colnames(Ints)<-rownames(Ints)<-paste(trophicV,1:species)
+  Ints[lower.tri(Ints)]<-0
+  Ints[,trophicV=="plants"]<-0
+  
+  nets_pre<-apply(N1,2,function(x){
+    Int_strength<-abs(Ints*rep(x,each=species))
+    Int_strength[x==0,]<-0
+    hold.df<-t(data.frame(Int_strength[x>0,x>0]))
+    net1<-graph.adjacency(hold.df,weighted = T)
+    return(net1) 
+  })
+  
+  nets_post<-apply(N,2,function(x){
+    Int_strength<-abs(Ints*rep(x,each=species))
+    Int_strength[x==0,]<-0
+    hold.df<-t(data.frame(Int_strength[x>0,x>0]))
+    net1<-graph.adjacency(hold.df,weighted = T)
+    return(net1) 
+  })
+  
+  initialInts<-t(matrix(c(Ints)*rep(N1,each=species),ncol=dim(N1)[2]))
+  initialInts_sub<-initialInts[,colSums(initialInts)!=0]
+  
+  BC_dist.df<-data.frame()
+  for(i in 1:dim(N)[2]){
+    comInts<-c(Ints*rep(N[,i],each=species))
+    comInts<-comInts[colSums(initialInts)!=0]
+    
+    BC_dist<-as.matrix(vegdist(abs(rbind(comInts,initialInts_sub)),method="bray",binary = F))[1,-1]
+    BC_dist.df<-rbind(BC_dist.df,data.frame(BC_dist=1-min(BC_dist),Patch=i,Closest_patch=which(BC_dist==min(BC_dist)),Analogue=Temp[i] <= max(Temp_I)))
+  }
+  
+  BC_dist.df<-BC_dist.df[1:which(Temp==max(Temp)),]
+  
+  NetInds<-data.frame()
+  for(i in BC_dist.df$Patch){
+    NetInds<-rbind(NetInds,data.frame(GenInd2(get.adjacency(nets_post[[i]],attr = "weight",sparse = F)))/data.frame(GenInd2(get.adjacency(nets_pre[[filter(BC_dist.df,Patch == i)$Closest_patch]],attr = "weight",sparse = F))))
+  }
+  
+  BC_dist.df<-bind_cols(BC_dist.df,NetInds)
+  
+  Net_dis.df<-BC_dist.df %>% 
+    group_by(Analogue) %>% 
+    mutate(Temp_diff=Temp[Patch]-Temp_I[Closest_patch]) %>%
+    dplyr::select(-Patch,-Closest_patch) %>% 
+    summarise_each(funs(mean(.,na.rm=T))) %>% 
+    mutate(Patches=c("no_analogue","analogue")) %>% 
+    dplyr::select(-Analogue, -Lint)
+  
+  names(Net_dis.df)<-c("Network_similarity","Nodes","System_throughput", "System_throughflow","Links","Link_density","Connectance","Average_link_weight","Compartment_throughflow","Compartmentalization","Temp_diff","Patches")
+  Net_dis.df<-Net_dis.df %>% 
+    gather(key = Response,value = "Value",Network_similarity:Temp_diff) %>% 
+    mutate(Dispersal=disp,Genetic_variation=V,Rep=r, Trophic="all")
+  
   clim_ana<-c("all","no_analogue","analogue")
   for(ca in clim_ana){
     if(ca == "all"){
@@ -155,65 +212,14 @@ calc_net_change<-function(N,N1,zmat,z1){
       #calculate change in z sd - for species that persist
       mean_z_sd_change<-mean(apply(z_select,1,sd,na.rm=T)[rowSums(N_select)>0],na.rm=T)/mean(apply(z1_select,1,sd,na.rm=T)[rowSums(N_select)>0],na.rm=T)
       
-      #network dissimilarity####
-      if(troph=="all"){
-        Ints<-matrix(1,species,species)
-        diag(Ints)<-0
-        
-        colnames(Ints)<-rownames(Ints)<-paste(trophicV,1:species)
-        
-        cut_value<-0.5
-        
-        nets_pre<-apply(N1_select,2,function(x){
-          Int_strength<-abs(Ints*rep(x,each=species))
-          Int_strength[x==0,]<-0
-          Int_strength_cut<-quantile(Int_strength[Int_strength>0],cut_value)
-          Int_strength[Int_strength<Int_strength_cut]<-0
-          #Int_strength[colSums(Int_strength)==0,]<-0 # to remove the species that have no reciprocal effect
-          Ints2<-1*Int_strength>0
-          hold.df<-t(data.frame(Ints2[x>0,x>0]))
-          net1<-graph.adjacency(hold.df)
-          return(net1) 
-        })
-        
-        nets_post<-apply(N[,patch_select],2,function(x){
-          Int_strength<-abs(Ints*rep(x,each=species))
-          Int_strength[x==0,]<-0
-          Int_strength_cut<-quantile(Int_strength[Int_strength>0],cut_value)
-          Int_strength[Int_strength<Int_strength_cut]<-0
-          #Int_strength[colSums(Int_strength)==0,]<-0 # to remove the species that have no reciprocal effect
-          Ints2<-1*Int_strength>0
-          hold.df<-t(data.frame(Ints2[x>0,x>0]))
-          net1<-graph.adjacency(hold.df)
-          return(net1) 
-        })
-        
-        regWeb_pre<-metaweb(nets_pre)
-        regWeb_post<-metaweb(nets_post)
-        
-        #network_betaplot(regWeb_post,regWeb_pre)
-        
-        NetInds<-data.frame(GenInd2(get.adjacency(regWeb_post,sparse = F)))/data.frame(GenInd2(get.adjacency(regWeb_pre,sparse = F)))                             
-        
-        NetInds$NetDiss<-1-betalink2(regWeb_pre,regWeb_post,bf = B_jack_diss)$WN
-        
-      } else {
-        NetInds<-data.frame(N=NA,T..=NA,TST=NA,Lint=NA,Ltot=NA,LD=NA,C=NA,Tijbar=NA,TSTbar=NA,Cbar=NA,NetDiss=NA)
-      }
-      
       #calculate change in richness, biomass, range size - range size only considers species that persist
       response.data1<-data.frame(Value=c(mean(colSums(N_select>0))/mean(colSums(N1_select>0)), #local richness
                                          mean(sum(rowSums(N_select)>0)/sum(rowSums(N1_select)>0)), #regional richness
                                          mean(colSums(N_select)/colSums(N1_select),na.rm=T), #local biomass
                                          mean((rowSums(N_select>0)/rowSums(N1_select>0))[rowSums(N_select)>0],na.rm=T),#range size
                                          mean_z_change,
-                                         mean_z_sd_change,
-                                         NetInds$NetDiss,
-                                         NetInds$Ltot,
-                                         NetInds$LD,
-                                         NetInds$C,
-                                         NetInds$Cbar),
-                                 Response=c("Local S","Regional S","Local biomass","Range size","Optima change","Optima sd","Network simmilarity","Total links","Link density","Connectance","Compartmentalization"),
+                                         mean_z_sd_change),
+                                 Response=c("Local S","Regional S","Local biomass","Range size","Optima change","Optima sd"),
                                  Trophic=troph,
                                  Dispersal=disp,
                                  Genetic_variation=V,
@@ -225,5 +231,6 @@ calc_net_change<-function(N,N1,zmat,z1){
       }
     }
   }
+  response.df<-bind_rows(response.df,Net_dis.df)
   return(response.df)
 }
