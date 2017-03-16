@@ -5,11 +5,12 @@ library(tidyverse)
 library(viridis)
 library(betalink)
 library(NetIndices)
+library(vegan)
 
 source("./functions/EM env change functions.r")
 
 #variables to contrast####
-reps<-5
+reps<-2
 V_all<-c(0.001,0.01,0.1,1,10,100) #additive genetic variation in thermal optimum
 dispV<-c(0.00001,0.0001,0.001,0.01,0.1,0.5)
 
@@ -158,7 +159,7 @@ for(r in 1:reps){
 }
 
 
-results.df$Response<-factor(results.df$Response,levels=c("Local S","Regional S","Local biomass","Range size","Optima sd","Optima change","Network simmilarity","Total links","Link density","Connectance","Compartmentalization"),ordered = TRUE)
+results.df$Response<-factor(results.df$Response,levels=c("Local S","Regional S","Local biomass","Range size","Optima sd","Optima change","Temp_diff","Network_similarity","Nodes","Links","Link_density","Connectance","Average_link_weight","Compartmentalization","System_throughput","System_throughflow","Compartment_throughflow"),ordered = TRUE)
 
 response_means<-results.df %>% 
   group_by(Response,Dispersal,Genetic_variation,Patches,Trophic) %>% 
@@ -231,7 +232,8 @@ ggplot(filter(response_means,
 
 ggplot(filter(response_means,
               Response=="Optima sd" |
-                Response=="Optima change",
+                Response=="Optima change" | 
+              Response =="Temp_diff",
               Trophic=="all")
        ,aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation)))+
   #scale_color_viridis(trans="log",breaks=V_all)+
@@ -282,13 +284,28 @@ ggplot(filter(response_means,
   theme_bw()+
   removeGrid()
 
+ggplot(filter(response_means,
+              Response=="Network_similarity",
+              Trophic== "all")
+       ,aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation),fill=as.character(Genetic_variation)))+
+  #scale_color_viridis(trans="log",breaks=V_all)+
+  geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=0.2,color=NA)+
+  geom_point()+
+  geom_line()+
+  facet_grid(Response~Patches,scales = "free_y")+
+  scale_x_log10()+
+  theme_bw()+
+  removeGrid()
+
 
 ggplot(filter(response_means,
-              Response=="Network simmilarity" |
-                Response=="Total links" |
-                Response=="Link density" |
+              Response=="Network_similarity" |
+                Response=="Nodes" |
+                Response=="Link_density" |
                 Response=="Connectance" |
-                Response=="Compartmentalization",
+                Response=="Compartmentalization"|
+                Response=="Average_link_weight"
+              ,
               Trophic== "all")
        ,aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation),fill=as.character(Genetic_variation)))+
   #scale_color_viridis(trans="log",breaks=V_all)+
@@ -300,6 +317,21 @@ ggplot(filter(response_means,
   theme_bw()+
   removeGrid()
 #ggsave(filename = "./figures/Changing environment/Network change.pdf",width = 13,height =8 )
+
+ggplot(filter(response_means,
+              Response=="System_throughput" |
+                Response=="System_throughflow" |
+                Response=="Compartment_throughflow" ,
+              Trophic== "all")
+       ,aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation),fill=as.character(Genetic_variation)))+
+  #scale_color_viridis(trans="log",breaks=V_all)+
+  geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=0.2,color=NA)+
+  geom_point()+
+  geom_line()+
+  facet_grid(Response~Patches,scales = "free_y")+
+  scale_x_log10()+
+  theme_bw()+
+  removeGrid()
 
 #save(response.df,file = "./workspace/Evolving MC - change.RData")
 
