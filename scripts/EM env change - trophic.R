@@ -24,11 +24,13 @@ nherb<-species*0.3
 npred<-species*0.2
 
 #Environmental change####
-burn_in<-5000
+eco_burn<-5000
+evo_burn<-10000
+burn_in<-eco_burn+evo_burn
 change<-7000
 change_mag<-7
 
-ChangeV<-c(rep(0,burn_in),seq(0,change_mag-1,length=change),rep(change_mag-1,burn_in))
+ChangeV<-c(rep(0,burn_in),seq(0,change_mag-1,length=change))
 Tmax<-length(ChangeV)
 
 #Species interactions####
@@ -127,7 +129,7 @@ for(r in 1:reps){
         
         Nt1<-g*N
         
-        if(l > 3000){
+        if(l > eco_burn){
         #change in trait z
         z_change<-z_up<-(exp(C3+Env_perform2(env = Temp,z = zmat+0.01,sig_p = sig_p)+BB%*%N)-g)
         z_down<-(exp(C3+Env_perform2(env = Temp,z = zmat-0.01,sig_p = sig_p)+BB%*%N)-g)
