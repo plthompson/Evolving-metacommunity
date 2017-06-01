@@ -10,7 +10,7 @@ library(vegan)
 source("./functions/EM env change functions.r")
 
 #variables to contrast####
-reps<-5
+reps<-3
 V_all<-c(0.001,0.01,0.1,1,10,100) #additive genetic variation in thermal optimum
 dispV<-c(0.00001,0.0001,0.001,0.01,0.1,0.5)
 
@@ -127,6 +127,7 @@ for(r in 1:reps){
         
         Nt1<-g*N
         
+        if(l > 3000){
         #change in trait z
         z_change<-z_up<-(exp(C3+Env_perform2(env = Temp,z = zmat+0.01,sig_p = sig_p)+BB%*%N)-g)
         z_down<-(exp(C3+Env_perform2(env = Temp,z = zmat-0.01,sig_p = sig_p)+BB%*%N)-g)
@@ -144,11 +145,15 @@ for(r in 1:reps){
         zt1<-(dV*(zt*Nt1)%*%disp_matrix+(Nt1*zt*(1-dV)))/Nt
         zt1[is.na(zt1)]<-zt[is.na(zt1)]
         zt<-zt1
+        zmat<-zt
+        } else {
+          Nt<-Nt1-Nt1*dV+dV*Nt1%*%disp_matrix
+        }
         
         Nt[Nt<10^-3]<-0
         N<-Nt
         Nsave[,,l]<-N
-        zmat<-zt
+        
         Zsave[,,l]<-zmat
       }
       
