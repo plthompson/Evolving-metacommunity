@@ -152,18 +152,19 @@ calc_net_change<-function(N,N1,zmat,z1){
     comInts<-comInts[colSums(initialInts)!=0]
     
     BC_dist<-as.matrix(vegdist(abs(rbind(comInts,initialInts_sub)),method="bray",binary = F))[1,-1]
-    BC_dist.df<-rbind(BC_dist.df,data.frame(BC_dist=1-min(BC_dist),Patch=i,Closest_patch=which(BC_dist==min(BC_dist)),Analogue=Temp[i] <= max(Temp_I)))
+    BC_dist.df<-rbind(BC_dist.df,data.frame(BC_dist=1-min(BC_dist),Patch=i,Closest_patch=which(BC_dist==min(BC_dist)),Analogue=Temp[i] <= max(Temp_I))[1,])
   }
   
-  BC_dist.df<-BC_dist.df[1:which(Temp==max(Temp)),]
-  
+  BC_dist.df<-BC_dist.df %>% 
+    filter(Patch <= which(Temp==max(Temp)))
+
   NetInds<-data.frame()
   for(i in BC_dist.df$Patch){
     if(length(E(nets_pre[[filter(BC_dist.df,Patch == i)$Closest_patch[1]]]))>0){
       if(length(E(nets_post[[i]]))>0){
         NetInds<-rbind(NetInds,data.frame(GenInd2(get.adjacency(nets_post[[i]],attr = "weight",sparse = F)))/data.frame(GenInd2(get.adjacency(nets_pre[[filter(BC_dist.df,Patch == i)$Closest_patch[1]]],attr = "weight",sparse = F))))
       } else {
-        NetInds<-rbind(NetInds,0/data.frame(GenInd2(get.adjacency(nets_pre[[filter(BC_dist.df,Patch == i)$Closest_patch]],attr = "weight",sparse = F))))
+        NetInds<-rbind(NetInds,0/data.frame(GenInd2(get.adjacency(nets_pre[[filter(BC_dist.df,Patch == i)$Closest_patch[1]]],attr = "weight",sparse = F))))
       }
     } else{
       NetInds<-rbind(NetInds,NA)
