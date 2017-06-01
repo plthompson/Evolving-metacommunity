@@ -10,7 +10,7 @@ library(vegan)
 source("./functions/EM env change functions.r")
 
 #variables to contrast####
-reps<-10
+reps<-5
 V_all<-c(0.001,0.01,0.1,1,10,100) #additive genetic variation in thermal optimum
 dispV<-c(0.00001,0.0001,0.001,0.01,0.1,0.5)
 
@@ -39,7 +39,7 @@ herbV<-(nplants+1):(nplants+nherb)
 predV<-(species-npred+1):(species)
 trophicV<-factor(c(rep("plant",nplants),rep("herbivore",nherb),rep("predator",npred)),levels=c("plant","herbivore","predator"),ordered = T)
 
-
+results.df<-data.frame()
 for(r in 1:reps){
   
   b11=-0.1
@@ -77,33 +77,43 @@ for(r in 1:reps){
   sig_p<-0.15
   
   #dispersal####
-  edges<-rep(1:patches,each=2)
-  edges<-c(edges[-1],edges[1])
-  graph<-make_graph(edges, directed = FALSE)
-  dist_mat<-distances(graph)
+  # edges<-rep(1:patches,each=2)
+  # edges<-c(edges[-1],edges[1])
+  # graph<-make_graph(edges, directed = FALSE)
+  # dist_mat<-distances(graph)
+  # 
+  # dd<-0.5#rnorm(n = species,mean=0.5,sd=0.1)
+  # disp_matrix<-exp(-dd*dist_mat)
+  # diag(disp_matrix)<-0
+  # disp_matrix<-disp_matrix/rowSums(disp_matrix)
+  # 
+  # ddV<-rnorm(species,mean = dd,sd = 0.5*0.1)
+  # 
+  # disp_array<-array(NA,dim=c(patches,patches,species))
+  # for(s in 1:species){
+  #   disp_matrix<-exp(-ddV[s]*dist_mat)
+  #   diag(disp_matrix)<-0
+  #   disp_matrix<-disp_matrix/rowSums(disp_matrix)
+  #   disp_array[,,s]<-disp_matrix
+  # }
+  # disp_array_initial<-disp_array
+  # #matplot(disp_array[,25,],type='l')
   
-  dd<-0.5#rnorm(n = species,mean=0.5,sd=0.1)
-  disp_matrix<-exp(-dd*dist_mat)
-  diag(disp_matrix)<-0
-  disp_matrix<-disp_matrix/rowSums(disp_matrix)
-  
-  ddV<-rnorm(species,mean = dd,sd = 0.5*0.1)
-  
-  disp_array<-array(NA,dim=c(patches,patches,species))
-  for(s in 1:species){
-    disp_matrix<-exp(-ddV[s]*dist_mat)
-    diag(disp_matrix)<-0
-    disp_matrix<-disp_matrix/rowSums(disp_matrix)
-    disp_array[,,s]<-disp_matrix
+  disp_matrix<-matrix(0,nrow = patches,ncol = patches)
+  for(p in 1:(patches-1)){
+    disp_matrix[p,p+1]<-0.5
+    disp_matrix[p+1,p]<-0.5
   }
-  disp_array_initial<-disp_array
-  #matplot(disp_array[,25,],type='l')
+  disp_matrix[1,patches]<-0.5
+  disp_matrix[patches,1]<-0.5
   
   for(disp in dispV){
     dV<-rnorm(species,mean = disp,sd=disp*0.25)
     for(V in V_all){
       print(paste("rep = ",r,", V = ",V,", d = ",disp,sep=""))
-      vV<-c(rnorm(nplants,mean = V,sd=V*0.25),rnorm(nherb,mean = V*0.5,sd=V*0.5*0.25),rnorm(npred,mean = V*0.25,sd=V*0.25*0.25))
+      isp_V<-0.25#0.25 is the base amount
+      vV<-c(rnorm(nplants,mean = V,sd=V*isp_V),rnorm(nherb,mean = V*0.5,sd=V*0.5*isp_V),rnorm(npred,mean = V*0.25,sd=V*0.25*isp_V))
+      #vV<-c(rnorm(nplants,mean = V,sd=V*isp_V),rnorm(nherb,mean = V*0,sd=V*0*isp_V),rnorm(npred,mean = V*0,sd=V*0*isp_V))
       
       N<-matrix(c(rep(5,nplants),rep(3,nherb),rep(1,npred)),species,patches)
       Zsave<-Nsave<-array(NA,dim=c(species,patches,Tmax))
@@ -148,12 +158,7 @@ for(r in 1:reps){
         geom_point()+
         scale_color_viridis()
       
-      hold<-calc_net_change(N = N, N1 = Nsave[,,burn_in], zmat = zmat, z1 = Zsave[,,burn_in])
-      if(disp==dispV[1] & r == 1 & V == V_all[1]){
-        results.df<-hold
-      } else {
-        results.df<-rbind(results.df,hold)
-      }
+      results.df<-rbind(results.df,calc_net_change(N = N, N1 = Nsave[,,burn_in], zmat = zmat, z1 = Zsave[,,burn_in]))
     }
   }
 }
@@ -188,6 +193,21 @@ ggplot(filter(response_means,
                 Response=="Local biomass" |
                 Response=="Range size",
               Trophic=="plant")
+       ,aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation),fill=as.character(Genetic_variation)))+
+  #scale_color_viridis(trans="log",breaks=V_all)+
+  geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=0.2,color=NA)+
+  geom_point()+
+  geom_line()+
+  facet_grid(Response~Patches,scales = "free_y")+
+  scale_x_log10()+
+  theme_bw()+
+  removeGrid()
+
+ggplot(filter(response_means,
+              Response=="Local S" |
+                Response=="Regional S" ,
+              Patches !="all",
+              Trophic=="predator")
        ,aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation),fill=as.character(Genetic_variation)))+
   #scale_color_viridis(trans="log",breaks=V_all)+
   geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=0.2,color=NA)+
