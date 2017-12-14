@@ -10,7 +10,7 @@ library(vegan)
 source("./functions/EM env change functions.r")
 
 #variables to contrast####
-reps<-3
+reps<-10
 V_all<-c(0.001,0.01,0.1,1,10,100) #additive genetic variation in thermal optimum
 dispV<-c(0.00001,0.0001,0.001,0.01,0.1,0.5)
 
@@ -43,7 +43,6 @@ trophicV<-factor(c(rep("plant",nplants),rep("herbivore",nherb),rep("predator",np
 
 results.df<-data.frame()
 for(r in 1:reps){
-  
   b11=-0.1
   b12=-0.3
   b21=0.1
@@ -110,72 +109,117 @@ for(r in 1:reps){
   disp_matrix[patches,1]<-0.5
   
   for(disp in dispV){
+    print(paste("Rep = ",r,", Disp = ",disp,sep=""))
     dV<-rnorm(species,mean = disp,sd=disp*0.25)
-    for(V in V_all){
-      print(paste("rep = ",r,", V = ",V,", d = ",disp,sep=""))
-      isp_V<-0.25#0.25 is the base amount
-      vV<-c(rnorm(nplants,mean = V,sd=V*isp_V),rnorm(nherb,mean = V*0.5,sd=V*0.5*isp_V),rnorm(npred,mean = V*0.25,sd=V*0.25*isp_V))
-      #vV<-c(rnorm(nplants,mean = V,sd=V*isp_V),rnorm(nherb,mean = V*0,sd=V*0*isp_V),rnorm(npred,mean = V*0,sd=V*0*isp_V))
-      
-      N<-matrix(c(rep(5,nplants),rep(3,nherb),rep(1,npred)),species,patches)
-      Zsave<-Nsave<-array(NA,dim=c(species,patches,Tmax))
-      zmat<-matrix(z,species,patches)
-      
-      for(l in 1:Tmax){
-        Temp<-Temp_I+ChangeV[l]
-        A<-Env_perform2(env = Temp,z=zmat,sig_p = sig_p)
-        
-        g<-exp(C3+BB%*%N+A)
-        
-        Nt1<-g*N
-        
-        if(l > eco_burn){
-        #change in trait z
-        z_change<-z_up<-(exp(C3+Env_perform2(env = Temp,z = zmat+0.01,sig_p = sig_p)+BB%*%N)-g)
-        z_down<-(exp(C3+Env_perform2(env = Temp,z = zmat-0.01,sig_p = sig_p)+BB%*%N)-g)
-        
-        z_up_down<-(z_up>0)*1
-        z_up_down[z_down>0]<-((z_down>0)*-1)[z_down>0]
-        
-        z_change[z_down>z_up]<-z_down[z_down>z_up]
-        z_change[z_change<0]<-0
-        
-        zt<-zmat+(Nt1*vV*z_change*z_up_down)
-        
-        Nt<-Nt1-Nt1*dV+dV*Nt1%*%disp_matrix
-        
-        zt1<-(dV*(zt*Nt1)%*%disp_matrix+(Nt1*zt*(1-dV)))/Nt
-        zt1[is.na(zt1)]<-zt[is.na(zt1)]
-        zt<-zt1
-        zmat<-zt
-        } else {
-          Nt<-Nt1-Nt1*dV+dV*Nt1%*%disp_matrix
-        }
-        
-        Nt[Nt<10^-3]<-0
-        N<-Nt
-        Nsave[,,l]<-N
-        
-        Zsave[,,l]<-zmat
-      }
-      
-      finalCom.df<-data.frame(species=1:species,patch=rep(1:patches,each=species),N=c(N),z=c(zmat))
-      
-      ggplot(filter(finalCom.df,N>0),aes(x=species,y=patch,color=z,size=N))+
-        geom_point()+
-        scale_color_viridis()
-      
-      results.df<-rbind(results.df,calc_net_change(N = N, N1 = Nsave[,,burn_in], zmat = zmat, z1 = Zsave[,,burn_in]))
-    }
+    output<-do.call(rbind,lapply(1:length(V_all),FUN = EMC_fun,no_troph_evo = TRUE))
+    results.df<-rbind(results.df,output)
   }
 }
 
-
 results.df$Response<-factor(results.df$Response,levels=c("Local S","Regional S","Local biomass","Range size","Optima sd","Optima change","Temp_diff","Network_similarity","Nodes","Links","Link_density","Connectance","Average_link_weight","Compartmentalization","System_throughput","System_throughflow","Compartment_throughflow"),ordered = TRUE)
+
+save(results.df,file = "./workspace/Evolving MC - change no TL evo.RData")
 
 response_means<-results.df %>% 
   group_by(Response,Dispersal,Genetic_variation,Patches,Trophic) %>% 
-  summarise(Mean=mean(Value, na.rm=T),Lower=quantile(Value,probs = 0.25,na.rm=T),Upper = quantile(Value,probs = 0.75,na.rm=T))
+  summarise(Mean=median(Value, na.rm=T),Lower=quantile(Value,probs = 0.25,na.rm=T),Upper = quantile(Value,probs = 0.75,na.rm=T))
+
+#main figures####
+ggplot(filter(response_means,
+              Response=="Regional S",
+              Trophic== "all",
+              Patches!="all"),
+       aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation),fill=as.character(Genetic_variation)))+
+  #scale_color_viridis(trans="log",breaks=V_all)+
+  geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=0.2,color=NA)+
+  geom_point()+
+  scale_color_discrete(name="Genetic variation")+
+  geom_line()+
+  scale_fill_discrete(guide=FALSE)+
+  facet_wrap(~Patches)+
+  scale_x_log10(breaks=c(1e-5,1e-4,1e-3,1e-2,1e-1,1))+
+  theme_bw()+
+  ylab("Regional species richness")+
+  removeGrid()+
+  theme(strip.background = element_rect(colour="white", fill="white"))
+ggsave("./figures/Regional diversity.png",width=7,height=3.5)
+
+ggplot(filter(response_means,
+              Response=="Network_similarity",
+              Trophic== "all"),
+       aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation),fill=as.character(Genetic_variation)))+
+  #scale_color_viridis(trans="log",breaks=V_all)+
+  geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=0.2,color=NA)+
+  geom_point()+
+  scale_color_discrete(name="Genetic variation")+
+  geom_line()+
+  scale_fill_discrete(guide=FALSE)+
+  facet_wrap(~Patches,scales = "free_y")+
+  scale_x_log10(breaks=c(1e-5,1e-4,1e-3,1e-2,1e-1,1))+
+  theme_bw()+
+  ylab("Network similarity")+
+  removeGrid()+
+  theme(strip.background = element_rect(colour="white", fill="white"))
+ggsave("./figures/Community reorganization.png",width=7,height=3.5)
+
+ggplot(filter(response_means,
+              Response=="Link_density" |
+                Response=="Connectance" |
+                Response=="Compartmentalization"|
+                Response=="Average_link_weight",
+              Trophic== "all"),
+       aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation),fill=as.character(Genetic_variation)))+
+  scale_color_discrete(name="Genetic variation")+
+  scale_fill_discrete(guide=FALSE)+
+  geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=0.2,color=NA)+
+  geom_point()+
+  geom_line()+
+  facet_grid(Patches~Response)+
+  scale_x_log10(breaks=c(1e-5,1e-4,1e-3,1e-2,1e-1,1))+
+  theme_bw()+
+  removeGrid()+
+  theme(strip.background = element_rect(colour="white", fill="white"))
+ggsave(filename = "./figures/Network change.png",width = 12,height =6)
+
+ggplot(filter(response_means,
+              Response=="System_throughput" |
+                Response=="System_throughflow" |
+                Response=="Compartment_throughflow" ,
+              Trophic== "all")
+       ,aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation),fill=as.character(Genetic_variation)))+
+  #scale_color_viridis(trans="log",breaks=V_all)+
+  geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=0.2,color=NA)+
+  geom_point()+
+  geom_line()+
+  facet_grid(Response~Patches,scales = "free_y")+
+  scale_x_log10()+
+  theme_bw()+
+  removeGrid()
+
+
+ggplot(filter(response_means,
+              Response=="Regional S",
+              Trophic== "predator",
+              Patches!="all"),
+       aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation),fill=as.character(Genetic_variation)))+
+  #scale_color_viridis(trans="log",breaks=V_all)+
+  geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=0.2,color=NA)+
+  geom_point()+
+  scale_color_discrete(name="Genetic variation")+
+  geom_line()+
+  scale_fill_discrete(guide=FALSE)+
+  facet_wrap(~Patches)+
+  scale_x_log10(breaks=c(1e-5,1e-4,1e-3,1e-2,1e-1,1))+
+  scale_y_continuous(breaks=seq(0,1,by=0.25))+
+  theme_bw()+
+  ylab("Regional predator richness")+
+  removeGrid()+
+  theme(strip.background = element_rect(colour="white", fill="white"))
+ggsave("./figures/Predator diversity.png",width=7,height=3.5)
+
+
+
+#old figures####
 
 ggplot(filter(response_means,
               Response=="Local S" |
@@ -312,27 +356,10 @@ ggplot(filter(response_means,
   removeGrid()
 
 ggplot(filter(response_means,
-              Response=="Network_similarity",
-              Trophic== "all")
-       ,aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation),fill=as.character(Genetic_variation)))+
-  #scale_color_viridis(trans="log",breaks=V_all)+
-  geom_ribbon(aes(ymin=Lower,ymax=Upper),alpha=0.2,color=NA)+
-  geom_point()+
-  geom_line()+
-  facet_grid(Response~Patches,scales = "free_y")+
-  scale_x_log10()+
-  theme_bw()+
-  removeGrid()
-
-
-ggplot(filter(response_means,
-              Response=="Network_similarity" |
-                Response=="Nodes" |
                 Response=="Link_density" |
                 Response=="Connectance" |
                 Response=="Compartmentalization"|
-                Response=="Average_link_weight"
-              ,
+                Response=="Average_link_weight",
               Trophic== "all")
        ,aes(x=Dispersal,y=Mean,group=Genetic_variation, color=as.character(Genetic_variation),fill=as.character(Genetic_variation)))+
   #scale_color_viridis(trans="log",breaks=V_all)+
@@ -360,5 +387,5 @@ ggplot(filter(response_means,
   theme_bw()+
   removeGrid()
 
-save(results.df,file = "./workspace/Evolving MC - change.RData")
+
 

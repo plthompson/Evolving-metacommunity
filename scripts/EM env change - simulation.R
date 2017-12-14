@@ -16,7 +16,7 @@ library(NetIndices)
 source("./functions/EM env change functions.R")
 
 #simulation model####
-reps<-1
+reps<-3
 
 species<-20
 patches<-50
