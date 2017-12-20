@@ -3,12 +3,17 @@ library(tidyverse)
 library(viridis)
 library(vegan)
 
-species<-8
-patches<-9
+species<-15
+patches<-30
 
 mutation_r<-0.1
 disp<-0.01
-Tmax<-1500
+
+burnIn<-500
+changeTime<-500
+Tmax<-burnIn+changeTime
+changeMag<-5
+changet<-changeMag/(changeTime-1)
 
 Env_perform<-function(env,z,zmax=NA,sig_p){
   wT<-exp(-((env-z)/2*sig_p)^2)
@@ -17,13 +22,13 @@ Env_perform<-function(env,z,zmax=NA,sig_p){
   return(wT)
 }
 
+Environment<-data.frame(patch = 1:patches, environment = c(1:(1+patches/2),(patches/2):2))
+Species_traits<-data.frame(species = 1:species, z = seq(min(Environment$environment),max(Environment$environment),length = species), sig_p = 0.2,r = 5, dispersal = disp)
+
 B<-matrix(runif(n = species*species,-0.75,-0.25),nrow = species, ncol = species)*0.1 #stable co-existence
 
 B<-matrix(rnorm(species*species,mean = -0.9,sd=0.2),nrow=species,ncol=species)*0.1 #priority effects
 diag(B)<- -1*0.1
-
-Environment<-data.frame(patch = 1:patches, environment = seq(15,25,length = patches))
-Species_traits<-data.frame(species = 1:species, z = seq(15,25,length = species), sig_p = 0.2,r = 5, dispersal = disp)
 
 N<-matrix(sample(size = species*patches,x = 5:60,replace = T), nrow=patches, ncol=species)
 
@@ -63,6 +68,14 @@ for(i in 1:Tmax){
     data.matrix()
   N.mat[is.na(N.mat)]<-0
   
+  if(i>burnIn){
+    Environment$environment<-Environment$environment+changet
+    ind.df$environment<-ind.df$environment+changet
+  }
+  
+  ind.df$
+    ind.df<-leftjoin
+  
   ind.df$env_effect<-Env_perform(env = ind.df$environment,z = ind.df$z,sig_p = ind.df$sig_p)*5#-abs(ind.df$environment-ind.df$z)*2
   
   ind.df <- merge(ind.df,data.frame(patch = 1:patches, species = rep(1:species ,each = patches),ints = c(N.mat%*%B)))
@@ -90,7 +103,10 @@ for(i in 1:Tmax){
     #dispersal
     ind.df2$parent<-NULL
     dispersers<-rbinom(n = nrow(ind.df2),size = 1,prob = disp)
-    ind.df2$patch[dispersers]<-sample(1:patches,size =sum(dispersers),replace = TRUE)
+    
+    ind.df2$patch[dispersers]<-ind.df2$patch[dispersers]+sample(c(-1,1),size =sum(dispersers),replace = TRUE)
+    ind.df2$patch[ind.df2$patch<1]<-patches
+    ind.df2$patch[ind.df2$patch>patches]<-1
     ind.df2$environment<-NULL
     ind.df2<-left_join(ind.df2,Environment, by = "patch")
     
@@ -108,51 +124,50 @@ for(i in 1:Tmax){
 }
 close(pb)
 
-ggplot(filter(Nsave, time==200),aes(x = species, y = N, color=as.factor(species), group = species))+
-  geom_point()+
-  facet_wrap(~patch)
-
-ggplot(Nsave,aes(x = time, y = N, color=as.factor(species), group = species))+
-  geom_line()+
-  facet_wrap(~patch)
-
-ggplot(Nsave,aes(x = time, y = z, color=as.factor(species), fill=as.factor(species), group = species))+
+ggplot(filter(Nsave, time %in% round(seq(1,Tmax, length = 100))),aes(x = time, y = z, color=as.factor(species), fill=as.factor(species), group = species))+
   geom_ribbon(aes(ymin=lower_z,ymax = upper_z),alpha = 0.4,col=NA)+
   geom_line()+
   facet_wrap(~patch)+
   theme_bw()
 
-ggplot(Nsave,aes(x = time, y = z, color=as.factor(patch), fill=as.factor(patch), group = patch))+
+ggplot(filter(Nsave, time %in% round(seq(1,Tmax, length = 100))),aes(x = time, y = z, color=as.factor(patch), fill=as.factor(patch), group = patch))+
   geom_ribbon(aes(ymin=lower_z,ymax = upper_z),alpha = 0.4,col=NA)+
   geom_line()+
   facet_wrap(~species)+
   theme_bw()
 
+ggplot(filter(filter(Nsave, time %in% round(seq(1,Tmax, length = 100))), time %in% round(seq(1,Tmax, length = 100))),aes(x = time, y = N, color=as.factor(species), group = species))+
+  geom_line()+
+  scale_color_viridis(discrete = TRUE)+
+  facet_wrap(~patch)
+
 nmds<-Nsave %>%
+  filter(patch<31) %>% 
   filter(time %in% round(seq(100,Tmax, length = 50))) %>% 
   select(patch,species,time,N) %>% 
   spread(key = species,value = N,fill = 0) %>%
   select(-patch,-time) %>% 
   decostand(method = "hellinger") %>% 
   vegdist(method = "euclidean") %>% 
-  metaMDS()
+  metaMDS(trymax = 1)
 
 data.scores <- as.data.frame(scores(nmds))
 
 data.scores<-bind_cols(Nsave %>%
+                         filter(patch<31) %>% 
                          filter(time %in% round(seq(100,Tmax, length = 50))) %>% 
                          select(patch, species, time, N) %>% 
                          spread(key = species, value = N, fill = 0) %>% 
                          select(patch, time), data.scores)
 
-ggplot(filter(data.scores, time>1000),aes(x=NMDS1,y = NMDS2, group=as.factor(patch), color = as.factor(patch)))+
+ggplot(filter(data.scores, time>500),aes(x=NMDS1,y = NMDS2, group=as.factor(patch), color = as.factor(patch)))+
   geom_point()+
   geom_path()+
   scale_color_viridis(discrete = TRUE)+
   theme_bw()
 
 
-ggplot(filter(data.scores, time>1000),aes(x=NMDS1,y = NMDS2, group=as.factor(patch), color = time))+
+ggplot(filter(data.scores, time>500),aes(x=NMDS1,y = NMDS2, group=as.factor(patch), color = time))+
   geom_point()+
   geom_path()+
   scale_color_viridis()+
