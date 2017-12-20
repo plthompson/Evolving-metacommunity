@@ -1,12 +1,14 @@
 #individual based LV model
 library(tidyverse)
+library(viridis)
+library(vegan)
 
 species<-8
 patches<-9
 
 mutation_r<-0.1
 disp<-0.01
-Tmax<-500
+Tmax<-1500
 
 Env_perform<-function(env,z,zmax=NA,sig_p){
   wT<-exp(-((env-z)/2*sig_p)^2)
@@ -53,56 +55,56 @@ for(i in 1:Tmax){
   
   Nsave<-bind_rows(Nsave,N.df)
   
-N.mat<-left_join(hold.df,ind.df %>% 
-    group_by(patch, species) %>% 
-    summarise(N = n()), by = c("patch","species")) %>% 
+  N.mat<-left_join(hold.df,ind.df %>% 
+                     group_by(patch, species) %>% 
+                     summarise(N = n()), by = c("patch","species")) %>% 
     spread(key = species,value = N) %>% 
-  select(-patch) %>% 
-  data.matrix()
-N.mat[is.na(N.mat)]<-0
-
-ind.df$env_effect<-Env_perform(env = ind.df$environment,z = ind.df$z,sig_p = ind.df$sig_p)*5#-abs(ind.df$environment-ind.df$z)*2
-
-ind.df <- merge(ind.df,data.frame(patch = 1:patches, species = rep(1:species ,each = patches),ints = c(N.mat%*%B)))
-
-ind.df<-ind.df %>% 
-  group_by(individual) %>% 
-  mutate(lambda = exp(r+ints+env_effect),offspring = rpois(n = 1,lambda = lambda))
-
-if(sum(ind.df$offspring)>0){
-  reproducers<-ind.df %>% 
-    filter(offspring>0)
-  reproducers$parent<-reproducers$individual
-  reproducers$individual<-1:nrow(reproducers)
-  parents<-data.frame(individual = unlist(lapply(reproducers$individual,FUN = function(x) {
-  rep(reproducers$parent[x], reproducers$offspring[x])
-})))
+    select(-patch) %>% 
+    data.matrix()
+  N.mat[is.na(N.mat)]<-0
   
-
-ind.df2<-merge(parents, ind.df)
-names(ind.df2)[1]<-"parent"
-ind.df2$individual<-(max(ind.df$individual)+1):(max(ind.df$individual)+nrow(ind.df2))
-
-ind.df2$z<-rnorm(n = nrow(ind.df2), mean = ind.df2$z, sd = mutation_r)
-
-#dispersal
-ind.df2$parent<-NULL
-dispersers<-rbinom(n = nrow(ind.df2),size = 1,prob = disp)
-ind.df2$patch[dispersers]<-sample(1:patches,size =sum(dispersers),replace = TRUE)
-ind.df2$environment<-NULL
-ind.df2<-left_join(ind.df2,Environment, by = "patch")
-
-} else {
-  ind.df2<-data.frame()
-}
-
+  ind.df$env_effect<-Env_perform(env = ind.df$environment,z = ind.df$z,sig_p = ind.df$sig_p)*5#-abs(ind.df$environment-ind.df$z)*2
   
-ind.df$survive <- rbinom(n = nrow(ind.df),size = 1,prob = 0.95)
-
-ind.df<-ind.df[ind.df$survive==1,]
-
-ind.df<-bind_rows(ind.df,ind.df2)
-ind.df$ints<-NULL
+  ind.df <- merge(ind.df,data.frame(patch = 1:patches, species = rep(1:species ,each = patches),ints = c(N.mat%*%B)))
+  
+  ind.df<-ind.df %>% 
+    group_by(individual) %>% 
+    mutate(lambda = exp(r+ints+env_effect),offspring = rpois(n = 1,lambda = lambda), survive = rbinom(n = 1,size = 1,prob = lambda))
+  
+  if(sum(ind.df$offspring)>0){
+    reproducers<-ind.df %>% 
+      filter(offspring>0)
+    reproducers$parent<-reproducers$individual
+    reproducers$individual<-1:nrow(reproducers)
+    parents<-data.frame(individual = unlist(lapply(reproducers$individual,FUN = function(x) {
+      rep(reproducers$parent[x], reproducers$offspring[x])
+    })))
+    
+    
+    ind.df2<-merge(parents, ind.df)
+    names(ind.df2)[1]<-"parent"
+    ind.df2$individual<-(max(ind.df$individual)+1):(max(ind.df$individual)+nrow(ind.df2))
+    
+    ind.df2$z<-rnorm(n = nrow(ind.df2), mean = ind.df2$z, sd = mutation_r)
+    
+    #dispersal
+    ind.df2$parent<-NULL
+    dispersers<-rbinom(n = nrow(ind.df2),size = 1,prob = disp)
+    ind.df2$patch[dispersers]<-sample(1:patches,size =sum(dispersers),replace = TRUE)
+    ind.df2$environment<-NULL
+    ind.df2<-left_join(ind.df2,Environment, by = "patch")
+    
+  } else {
+    ind.df2<-data.frame()
+  }
+  
+  
+  ind.df$survive <- rbinom(n = nrow(ind.df),size = 1,prob = 0.95)
+  
+  ind.df<-ind.df[ind.df$survive==1,]
+  
+  ind.df<-bind_rows(ind.df,ind.df2)
+  ind.df$ints<-NULL
 }
 close(pb)
 
@@ -116,18 +118,43 @@ ggplot(Nsave,aes(x = time, y = N, color=as.factor(species), group = species))+
 
 ggplot(Nsave,aes(x = time, y = z, color=as.factor(species), fill=as.factor(species), group = species))+
   geom_ribbon(aes(ymin=lower_z,ymax = upper_z),alpha = 0.4,col=NA)+
-  geom_path()+
-  facet_wrap(~patch,scales = "free")+
+  geom_line()+
+  facet_wrap(~patch)+
   theme_bw()
 
 ggplot(Nsave,aes(x = time, y = z, color=as.factor(patch), fill=as.factor(patch), group = patch))+
   geom_ribbon(aes(ymin=lower_z,ymax = upper_z),alpha = 0.4,col=NA)+
+  geom_line()+
+  facet_wrap(~species)+
+  theme_bw()
+
+nmds<-Nsave %>%
+  filter(time %in% round(seq(100,Tmax, length = 50))) %>% 
+  select(patch,species,time,N) %>% 
+  spread(key = species,value = N,fill = 0) %>%
+  select(-patch,-time) %>% 
+  decostand(method = "hellinger") %>% 
+  vegdist(method = "euclidean") %>% 
+  metaMDS()
+
+data.scores <- as.data.frame(scores(nmds))
+
+data.scores<-bind_cols(Nsave %>%
+                         filter(time %in% round(seq(100,Tmax, length = 50))) %>% 
+                         select(patch, species, time, N) %>% 
+                         spread(key = species, value = N, fill = 0) %>% 
+                         select(patch, time), data.scores)
+
+ggplot(filter(data.scores, time>1000),aes(x=NMDS1,y = NMDS2, group=as.factor(patch), color = as.factor(patch)))+
+  geom_point()+
   geom_path()+
-  facet_wrap(~species,scales = "free")+
+  scale_color_viridis(discrete = TRUE)+
   theme_bw()
 
 
-
-
-
+ggplot(filter(data.scores, time>1000),aes(x=NMDS1,y = NMDS2, group=as.factor(patch), color = time))+
+  geom_point()+
+  geom_path()+
+  scale_color_viridis()+
+  theme_bw()
 
