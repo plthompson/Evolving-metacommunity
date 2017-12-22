@@ -1,14 +1,16 @@
 #individual based LV model
-library(tidyverse)
-library(viridis)
-library(vegan)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+#library(viridis)
+#library(vegan)
 
-EM_IBM<-function(species = 20, patches = 40, mutation_r = 0.1, disp = 0.01, type = "co-exist") {
+EM_IBM<-function(species = 10, patches = 10, mutation_r = 0.1, disp = 0.01, type = "co-exist", r = 0.1) {
   
-  burnIn<-500
+  burnIn<-1000
   changeTime<-500
-  Tmax<-burnIn+changeTime
-  changeMag<-10
+  Tmax<-burnIn+changeTime+burnIn
+  changeMag<-patches/4
   changet<-changeMag/(changeTime-1)
   
   Env_perform<-function(env,z,zmax=NA,sig_p){
@@ -19,17 +21,21 @@ EM_IBM<-function(species = 20, patches = 40, mutation_r = 0.1, disp = 0.01, type
   }
   
   Environment<-data.frame(patch = 1:patches, environment = c(1:(1+patches/2),(patches/2):2))
-  Species_traits<-data.frame(species = 1:species, z = seq(min(Environment$environment),max(Environment$environment),length = species), sig_p = 0.5,r = 5, dispersal = disp)
+  Species_traits<-data.frame(species = 1:species, z = seq(min(Environment$environment),max(Environment$environment),length = species), sig_p = 0.5,r = r, dispersal = disp)
   
-  B<-matrix(runif(n = species*species,-0.75,-0.25),nrow = species, ncol = species)*0.1 #stable co-existence
+  B<-matrix(runif(n = species*species,-0.75,-0.25),nrow = species, ncol = species)*0.02*r #stable co-existence
   
   if(type == "priority"){
-    B<-matrix(rnorm(species*species,mean = -0.9,sd=0.2),nrow=species,ncol=species)*0.1 #priority effects
+    B<-matrix(rnorm(species*species,mean = -0.9,sd=0.2),nrow=species,ncol=species)*0.02*r #priority effects
   }
   
-  diag(B)<- -1*0.1
+  if(type == "noInt"){
+    B<-matrix(0,nrow=species,ncol=species)*0.02*r #priority effects
+  }
   
-  N<-matrix(sample(size = species*patches,x = 5:60,replace = T), nrow=patches, ncol=species)
+  diag(B)<- -1*0.02
+  
+  N<-matrix(sample(size = species*patches,x = 5,replace = T), nrow=patches, ncol=species)
   
   species_init<-unlist(sapply(1:species,FUN = function(x) {
     rep(x,colSums(N)[x])
@@ -54,7 +60,7 @@ EM_IBM<-function(species = 20, patches = 40, mutation_r = 0.1, disp = 0.01, type
     setTxtProgressBar(pb, i)
     N.df<-ind.df %>% 
       group_by(patch, species) %>% 
-      summarise(N = n(),upper_z = quantile(z,probs = 0.75),lower_z=quantile(z,probs = 0.25), z=mean(z)) %>% 
+      summarise(N = n(),upper_z = quantile(z,probs = 0.75),lower_z=quantile(z,probs = 0.25), z=mean(z), Environment = mean(environment)) %>% 
       mutate(time = i)
     
     Nsave<-bind_rows(Nsave,N.df)
@@ -67,18 +73,18 @@ EM_IBM<-function(species = 20, patches = 40, mutation_r = 0.1, disp = 0.01, type
       data.matrix()
     N.mat[is.na(N.mat)]<-0
     
-    if(i>burnIn){
+    if(i>burnIn & i<burnIn+changeTime){
       Environment$environment<-Environment$environment+changet
       ind.df$environment<-ind.df$environment+changet
     }
     
-    ind.df$env_effect<-Env_perform(env = ind.df$environment,z = ind.df$z,sig_p = ind.df$sig_p)*5#-abs(ind.df$environment-ind.df$z)*2
+    ind.df$env_effect<-Env_perform(env = ind.df$environment,z = ind.df$z,sig_p = ind.df$sig_p)*4*r#-abs(ind.df$environment-ind.df$z)*2
     
     ind.df <- merge(ind.df,data.frame(patch = 1:patches, species = rep(1:species ,each = patches),ints = c(N.mat%*%B)))
     
     ind.df<-ind.df %>% 
       group_by(individual) %>% 
-      mutate(lambda = exp(r+ints+env_effect),offspring = rpois(n = 1,lambda = lambda), survive = rbinom(n = 1,size = 1,prob = lambda))
+      mutate(lambda = exp(r+ints+env_effect),offspring = rpois(n = 1,lambda = lambda))
     
     if(sum(ind.df$offspring)>0){
       reproducers<-ind.df %>% 
@@ -111,7 +117,7 @@ EM_IBM<-function(species = 20, patches = 40, mutation_r = 0.1, disp = 0.01, type
     }
     
     
-    ind.df$survive <- rbinom(n = nrow(ind.df),size = 1,prob = 0.95)
+    ind.df$survive <- rbinom(n = nrow(ind.df),size = 1,prob = 0.5)
     
     ind.df<-ind.df[ind.df$survive==1,]
     
@@ -119,81 +125,60 @@ EM_IBM<-function(species = 20, patches = 40, mutation_r = 0.1, disp = 0.01, type
     ind.df$ints<-NULL
   }
   close(pb)
-  output<-filter(Nsave, time %in% round(seq(1,Tmax, length = 100)))
+  output<-filter(Nsave, time %in% round(seq(10,Tmax, by = 10)))
   return(output)
 }
 
-Nsave<-EM_IBM()
+dispV<-c(0.0001,0.001,0.01,0.1,1)
+mutationV<-c(0,0.01,0.1,0.5,1)
+results.df<-data.frame()
+for(disp in dispV){
+  for(mut in mutationV){
+    
+    Nsave<-EM_IBM(mutation_r = mut, disp = disp)
+    
+    N_pre<-Nsave %>% 
+      filter(time == 1000)
+    
+    N_post<-Nsave %>% 
+      filter(time == 2500)
+    
+    analogue<-Nsave %>% 
+      filter(time == 1010) %>%
+      select(patch,Environment) %>% 
+      mutate(analogue = Environment<=25) %>%
+      select(-Environment) %>% 
+      group_by(patch) %>% 
+      slice(1) %>% 
+      ungroup()
+    
+    Nsave<-left_join(Nsave,analogue)
+    
+    Local<-Nsave %>% 
+      filter(time==1000 | time == 2500) %>% 
+      group_by(patch,time, analogue) %>% 
+      summarise(S = sum(N>0), N = sum(N)) %>% 
+      ungroup() %>% 
+      group_by(time, analogue) %>% 
+      summarise(S = mean(S), N = mean(N)) %>% 
+      mutate(Scale = "Local")
+    
+    Regional<-Nsave %>% 
+      filter(time==1000 | time == 2500) %>% 
+      group_by(time, analogue, species) %>% 
+      summarise(N = sum(N)) %>% 
+      ungroup() %>% 
+      group_by(time, analogue) %>% 
+      summarise(S = sum(N>0), N = sum(N)) %>% 
+      mutate(Scale = "Regional")
+    
+    results.hold<-bind_rows(Local,Regional)
+    results.hold$dispersal <- disp
+    results.hold$mutation_rate <- mut
+    
+    results.df<-bind_rows(results.df,results.hold)
+  }
+}
 
-ggplot(Nsave,aes(x = time, y = z, color=as.factor(species), fill=as.factor(species), group = species))+
-  geom_vline(xintercept = 500, lty = 2)+
-  geom_ribbon(aes(ymin=lower_z,ymax = upper_z),alpha = 0.4,col=NA)+
-  geom_line()+
-  facet_wrap(~patch)+
-  theme_bw()
-
-ggplot(Nsave,aes(x = time, y = z, color=as.factor(patch), fill=as.factor(patch), group = patch))+
-  geom_vline(xintercept = 500, lty = 2)+
-  geom_ribbon(aes(ymin=lower_z,ymax = upper_z),alpha = 0.4,col=NA)+
-  geom_line()+
-  facet_wrap(~species)+
-  theme_bw()
-
-ggplot(Nsave,aes(x = time, y = N, color=as.factor(species), group = species))+
-  geom_vline(xintercept = 500, lty = 2)+
-  geom_line()+
-  scale_color_viridis(discrete = TRUE)+
-  facet_wrap(~patch)
-
-Nsave %>%
-  group_by(species,time) %>% 
-  summarise(Regional_abundance = sum(N)) %>% 
-  ungroup() %>% 
-  group_by(time) %>% 
-  summarise(Regional_S = n()) %>% 
-  ggplot(aes(x=time, y = Regional_S))+
-  geom_line()+
-  theme_bw()
-
-
-data.wide<-Nsave %>%
-  filter(time %in% round(seq(100,Tmax, length = 50))) %>% 
-  select(patch,species,time,N) %>% 
-  spread(key = species,value = N,fill = 0) %>%
-  select(-patch,-time)
-
-data.wide<-data.wide[,colSums(data.wide)>0]
-data.wide<-data.wide[rowSums(data.wide)>0,]
-
-nmds<-data.wide %>%
-  decostand(method = "hellinger") %>% 
-  vegdist(method = "euclidean") %>% 
-  metaMDS(trymax = 1)
-
-data.scores <- as.data.frame(scores(nmds))
-
-data.scores<-bind_cols(Nsave %>%
-                         filter(time %in% round(seq(100,Tmax, length = 50))) %>% 
-                         select(patch, species, time, N) %>% 
-                         spread(key = species, value = N, fill = 0) %>% 
-                         select(patch, time), data.scores)
-
-ggplot(filter(data.scores, time<burnIn),aes(x=NMDS1,y = NMDS2, group=as.factor(patch), color = as.factor(patch)))+
-  geom_point()+
-  geom_path()+
-  scale_color_viridis(discrete = TRUE)+
-  theme_bw()
-
-ggplot(filter(data.scores, time>burnIn),aes(x=NMDS1,y = NMDS2, group=as.factor(patch), color = as.factor(patch)))+
-  geom_point()+
-  geom_path()+
-  scale_color_viridis(discrete = TRUE)+
-  theme_bw()
-
-
-ggplot(filter(data.scores, time>100),aes(x=NMDS1,y = NMDS2, group=as.factor(patch), color = time))+
-  geom_point()+
-  geom_path()+
-  scale_color_viridis()+
-  theme_bw()
+save(results.df, file = "./EM_results.RData")
 
