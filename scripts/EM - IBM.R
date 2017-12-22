@@ -5,10 +5,10 @@ library(tidyr)
 #library(viridis)
 #library(vegan)
 
-EM_IBM<-function(species = 10, patches = 10, mutation_r = 0.1, disp = 0.01, type = "co-exist", r = 0.1) {
+EM_IBM<-function(species = 80, patches = 50, mutation_r = 0.1, disp = 0.01, type = "co-exist", r = 0.5) {
   
   burnIn<-1000
-  changeTime<-500
+  changeTime<-2000
   Tmax<-burnIn+changeTime+burnIn
   changeMag<-patches/4
   changet<-changeMag/(changeTime-1)
@@ -21,9 +21,9 @@ EM_IBM<-function(species = 10, patches = 10, mutation_r = 0.1, disp = 0.01, type
   }
   
   Environment<-data.frame(patch = 1:patches, environment = c(1:(1+patches/2),(patches/2):2))
-  Species_traits<-data.frame(species = 1:species, z = seq(min(Environment$environment),max(Environment$environment),length = species), sig_p = 0.5,r = r, dispersal = disp)
+  Species_traits<-data.frame(species = 1:species, z = seq(min(Environment$environment),max(Environment$environment),length = species), sig_p = 0.5,r = r, dispersal = disp, offspring = 0)
   
-  B<-matrix(runif(n = species*species,-0.75,-0.25),nrow = species, ncol = species)*0.02*r #stable co-existence
+  B<-matrix(runif(n = species*species,-0.5,-0),nrow = species, ncol = species)*0.02*r #stable co-existence
   
   if(type == "priority"){
     B<-matrix(rnorm(species*species,mean = -0.9,sd=0.2),nrow=species,ncol=species)*0.02*r #priority effects
@@ -60,8 +60,14 @@ EM_IBM<-function(species = 10, patches = 10, mutation_r = 0.1, disp = 0.01, type
     setTxtProgressBar(pb, i)
     N.df<-ind.df %>% 
       group_by(patch, species) %>% 
-      summarise(N = n(),upper_z = quantile(z,probs = 0.75),lower_z=quantile(z,probs = 0.25), z=mean(z), Environment = mean(environment)) %>% 
+      summarise(N = n(),upper_z = quantile(z,probs = 0.75),lower_z=quantile(z,probs = 0.25), z=mean(z), Environment = mean(environment), Offspring = sum(offspring),Mean_offspring = mean(offspring)) %>% 
       mutate(time = i)
+    
+    if(length(unique(N.df$patch))<patches){
+      blank.df<-data.frame(patch = 1:50, Environment = Environment$environment,species = 1, N= 0, upper_z =NA,lower_z = NA,Offspring = NA, Mean_offspring = NA,time = i)
+      N.df<-bind_rows(N.df,blank.df %>% 
+        filter(!patch %in% unique(N.df$patch)))
+    }
     
     Nsave<-bind_rows(Nsave,N.df)
     
@@ -125,12 +131,16 @@ EM_IBM<-function(species = 10, patches = 10, mutation_r = 0.1, disp = 0.01, type
     ind.df$ints<-NULL
   }
   close(pb)
-  output<-filter(Nsave, time %in% round(seq(10,Tmax, by = 10)))
+  
+  sampleV<-seq(100,Tmax, by = 100)
+  output<-filter(Nsave, time %in% sampleV)
+
+  
   return(output)
 }
 
 dispV<-c(0.0001,0.001,0.01,0.1,1)
-mutationV<-c(0,0.01,0.1,0.5,1)
+mutationV<-c(0,0.01,0.1,0.5)
 results.df<-data.frame()
 for(disp in dispV){
   for(mut in mutationV){
@@ -141,10 +151,10 @@ for(disp in dispV){
       filter(time == 1000)
     
     N_post<-Nsave %>% 
-      filter(time == 2500)
+      filter(time == 4000)
     
     analogue<-Nsave %>% 
-      filter(time == 1010) %>%
+      filter(time == 4000) %>%
       select(patch,Environment) %>% 
       mutate(analogue = Environment<=25) %>%
       select(-Environment) %>% 
@@ -155,7 +165,7 @@ for(disp in dispV){
     Nsave<-left_join(Nsave,analogue)
     
     Local<-Nsave %>% 
-      filter(time==1000 | time == 2500) %>% 
+      filter(time==1000 | time == 4000) %>% 
       group_by(patch,time, analogue) %>% 
       summarise(S = sum(N>0), N = sum(N)) %>% 
       ungroup() %>% 
@@ -164,7 +174,7 @@ for(disp in dispV){
       mutate(Scale = "Local")
     
     Regional<-Nsave %>% 
-      filter(time==1000 | time == 2500) %>% 
+      filter(time==1000 | time == 4000) %>% 
       group_by(time, analogue, species) %>% 
       summarise(N = sum(N)) %>% 
       ungroup() %>% 
