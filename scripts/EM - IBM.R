@@ -5,7 +5,7 @@ library(tidyr)
 #library(viridis)
 #library(vegan)
 
-EM_IBM<-function(species = 80, patches = 50, mutation_r = 0.1, disp = 0.01, type = "co-exist", r = 0.5, changeTime = 2000) {
+EM_IBM<-function(species = 30, patches = 20, mutation_r = 0.01, disp = 0.01, type = "co-exist", r = 0.5, changeTime = 2000) {
   
   burnIn<-1000
   Tmax<-burnIn+changeTime+burnIn
@@ -53,29 +53,35 @@ EM_IBM<-function(species = 80, patches = 50, mutation_r = 0.1, disp = 0.01, type
   
   Nsave<-data.frame()
   hold.df<-data.frame(patch = 1:patches,species = rep(1:species,each = patches))
+  sampleV<-seq(100,Tmax, by=100)
   
   pb <- txtProgressBar(min = 0, max = Tmax, style = 3)
   for(i in 1:Tmax){
     setTxtProgressBar(pb, i)
-    N.df<-ind.df %>% 
-      group_by(patch, species) %>% 
-      summarise(N = n(),upper_z = quantile(z,probs = 0.75),lower_z=quantile(z,probs = 0.25), z=mean(z), Environment = mean(environment), Offspring = sum(offspring),Mean_offspring = mean(offspring)) %>% 
-      mutate(time = i)
-    
-    if(length(unique(N.df$patch))<patches){
-      blank.df<-data.frame(patch = 1:patches, Environment = Environment$environment,species = 1, N= 0, upper_z =NA,lower_z = NA,Offspring = NA, Mean_offspring = NA,time = i)
-      N.df<-bind_rows(N.df,blank.df %>% 
-                        filter(!patch %in% unique(N.df$patch)))
+    if(i %in% sampleV){
+      N.df<-ind.df %>% 
+        group_by(patch, species) %>% 
+        summarise(N = n(),upper_z = quantile(z,probs = 0.75),lower_z=quantile(z,probs = 0.25), z=mean(z), Environment = mean(environment), Offspring = sum(offspring),Mean_offspring = mean(offspring)) %>% 
+        mutate(time = i)
+      
+      if(length(unique(N.df$patch))<patches){
+        blank.df<-data.frame(patch = 1:patches, Environment = Environment$environment,species = 1, N= 0, upper_z =NA,lower_z = NA,Offspring = NA, Mean_offspring = NA,time = i)
+        N.df<-bind_rows(N.df,blank.df %>% 
+                          filter(!patch %in% unique(N.df$patch)))
+      }
+      
+      Nsave<-bind_rows(Nsave,N.df)
     }
-    
-    Nsave<-bind_rows(Nsave,N.df)
     
     N.mat<-left_join(hold.df,ind.df %>% 
                        group_by(patch, species) %>% 
                        summarise(N = n()), by = c("patch","species")) %>% 
       spread(key = species,value = N) %>% 
-      select(-patch) %>% 
       data.matrix()
+    N.mat<-N.mat[,-1]
+    
+    N.mat[is.na(N.mat)]<-0
+    
     N.mat[is.na(N.mat)]<-0
     
     if(i>burnIn & i<burnIn+changeTime){
@@ -85,23 +91,21 @@ EM_IBM<-function(species = 80, patches = 50, mutation_r = 0.1, disp = 0.01, type
     
     ind.df$env_effect<-Env_perform(env = ind.df$environment,z = ind.df$z,sig_p = ind.df$sig_p)*4*r#-abs(ind.df$environment-ind.df$z)*2
     
-    ind.df <- merge(ind.df,data.frame(patch = 1:patches, species = rep(1:species ,each = patches),ints = c(N.mat%*%B)))
+    ind.df <- left_join(ind.df,data.frame(patch = 1:patches, species = rep(1:species ,each = patches),ints = c(N.mat%*%B)), by = c("patch", "species"))
     
-    ind.df<-ind.df %>% 
-      group_by(individual) %>% 
-      mutate(lambda = exp(r+ints+env_effect),offspring = rpois(n = 1,lambda = lambda))
+    ind.df$offspring<-rpois(n = nrow(ind.df),lambda = exp(ind.df$r+ind.df$ints+ind.df$env_effect))
     
     if(sum(ind.df$offspring)>0){
-      reproducers<-ind.df %>% 
-        filter(offspring>0)
+      reproducers<-reproducers<-ind.df[ind.df$offspring>0,]
       reproducers$parent<-reproducers$individual
       reproducers$individual<-1:nrow(reproducers)
-      parents<-data.frame(individual = unlist(lapply(reproducers$individual,FUN = function(x) {
-        rep(reproducers$parent[x], reproducers$offspring[x])
+      
+      parents<-data.frame(individual = unlist(lapply(unique(reproducers$offspring),FUN = function(x){
+        rep(reproducers$parent[reproducers$offspring==x], each = x)
       })))
       
       
-      ind.df2<-merge(parents, ind.df)
+      ind.df2<-left_join(parents, ind.df, by = "individual")
       names(ind.df2)[1]<-"parent"
       ind.df2$individual<-(max(ind.df$individual)+1):(max(ind.df$individual)+nrow(ind.df2))
       
@@ -131,15 +135,12 @@ EM_IBM<-function(species = 80, patches = 50, mutation_r = 0.1, disp = 0.01, type
   }
   close(pb)
   
-  sampleV<-seq(100,Tmax, by = 100)
-  output<-filter(Nsave, time %in% sampleV)
   
-  
-  return(output)
+  return(Nsave)
 }
 
 dispV<-c(0.0001,0.001,0.01,0.1,1)
-mutationV<-c(0,0.01,0.05,0.1,0.5)
+mutationV<-c(0,0.01,0.03,0.05)
 results.df<-data.frame()
 for(rep in 1:5){
   for(disp in dispV){
