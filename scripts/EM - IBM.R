@@ -5,10 +5,9 @@ library(tidyr)
 #library(viridis)
 #library(vegan)
 
-EM_IBM<-function(species = 80, patches = 50, mutation_r = 0.1, disp = 0.01, type = "co-exist", r = 0.5) {
+EM_IBM<-function(species = 80, patches = 50, mutation_r = 0.1, disp = 0.01, type = "co-exist", r = 0.5, changeTime = 2000) {
   
   burnIn<-1000
-  changeTime<-2000
   Tmax<-burnIn+changeTime+burnIn
   changeMag<-patches/4
   changet<-changeMag/(changeTime-1)
@@ -64,9 +63,9 @@ EM_IBM<-function(species = 80, patches = 50, mutation_r = 0.1, disp = 0.01, type
       mutate(time = i)
     
     if(length(unique(N.df$patch))<patches){
-      blank.df<-data.frame(patch = 1:50, Environment = Environment$environment,species = 1, N= 0, upper_z =NA,lower_z = NA,Offspring = NA, Mean_offspring = NA,time = i)
+      blank.df<-data.frame(patch = 1:patches, Environment = Environment$environment,species = 1, N= 0, upper_z =NA,lower_z = NA,Offspring = NA, Mean_offspring = NA,time = i)
       N.df<-bind_rows(N.df,blank.df %>% 
-        filter(!patch %in% unique(N.df$patch)))
+                        filter(!patch %in% unique(N.df$patch)))
     }
     
     Nsave<-bind_rows(Nsave,N.df)
@@ -134,59 +133,62 @@ EM_IBM<-function(species = 80, patches = 50, mutation_r = 0.1, disp = 0.01, type
   
   sampleV<-seq(100,Tmax, by = 100)
   output<-filter(Nsave, time %in% sampleV)
-
+  
   
   return(output)
 }
 
 dispV<-c(0.0001,0.001,0.01,0.1,1)
-mutationV<-c(0,0.01,0.1,0.5)
+mutationV<-c(0,0.01,0.05,0.1,0.5)
 results.df<-data.frame()
-for(disp in dispV){
-  for(mut in mutationV){
-    
-    Nsave<-EM_IBM(mutation_r = mut, disp = disp)
-    
-    N_pre<-Nsave %>% 
-      filter(time == 1000)
-    
-    N_post<-Nsave %>% 
-      filter(time == 4000)
-    
-    analogue<-Nsave %>% 
-      filter(time == 4000) %>%
-      select(patch,Environment) %>% 
-      mutate(analogue = Environment<=25) %>%
-      select(-Environment) %>% 
-      group_by(patch) %>% 
-      slice(1) %>% 
-      ungroup()
-    
-    Nsave<-left_join(Nsave,analogue)
-    
-    Local<-Nsave %>% 
-      filter(time==1000 | time == 4000) %>% 
-      group_by(patch,time, analogue) %>% 
-      summarise(S = sum(N>0), N = sum(N)) %>% 
-      ungroup() %>% 
-      group_by(time, analogue) %>% 
-      summarise(S = mean(S), N = mean(N)) %>% 
-      mutate(Scale = "Local")
-    
-    Regional<-Nsave %>% 
-      filter(time==1000 | time == 4000) %>% 
-      group_by(time, analogue, species) %>% 
-      summarise(N = sum(N)) %>% 
-      ungroup() %>% 
-      group_by(time, analogue) %>% 
-      summarise(S = sum(N>0), N = sum(N)) %>% 
-      mutate(Scale = "Regional")
-    
-    results.hold<-bind_rows(Local,Regional)
-    results.hold$dispersal <- disp
-    results.hold$mutation_rate <- mut
-    
-    results.df<-bind_rows(results.df,results.hold)
+for(rep in 1:5){
+  for(disp in dispV){
+    for(mut in mutationV){
+      
+      Nsave<-EM_IBM(mutation_r = mut, disp = disp)
+      
+      N_pre<-Nsave %>% 
+        filter(time == 1000)
+      
+      N_post<-Nsave %>% 
+        filter(time == 4000)
+      
+      analogue<-Nsave %>% 
+        filter(time == 4000) %>%
+        select(patch,Environment) %>% 
+        mutate(analogue = Environment<=25) %>%
+        select(-Environment) %>% 
+        group_by(patch) %>% 
+        slice(1) %>% 
+        ungroup()
+      
+      Nsave<-left_join(Nsave,analogue)
+      
+      Local<-Nsave %>% 
+        filter(time==1000 | time == 4000) %>% 
+        group_by(patch,time, analogue) %>% 
+        summarise(S = sum(N>0), N = sum(N)) %>% 
+        ungroup() %>% 
+        group_by(time, analogue) %>% 
+        summarise(S = mean(S), N = mean(N)) %>% 
+        mutate(Scale = "Local")
+      
+      Regional<-Nsave %>% 
+        filter(time==1000 | time == 4000) %>% 
+        group_by(time, analogue, species) %>% 
+        summarise(N = sum(N)) %>% 
+        ungroup() %>% 
+        group_by(time, analogue) %>% 
+        summarise(S = sum(N>0), N = sum(N)) %>% 
+        mutate(Scale = "Regional")
+      
+      results.hold<-bind_rows(Local,Regional)
+      results.hold$dispersal <- disp
+      results.hold$rep <- rep
+      results.hold$mutation_rate <- mut
+      
+      results.df<-bind_rows(results.df,results.hold)
+    }
   }
 }
 
