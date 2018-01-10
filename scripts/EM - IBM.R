@@ -149,7 +149,7 @@ for(rep in 1:5){
   for(disp in dispV){
     for(mut in mutationV){
       
-      Nsave<-EM_IBM(mutation_r = mut, disp = disp)
+      Nsave<-EM_IBM(mutation_r = mut, disp = disp, patches = patches, changeTime = changeTime)
       
       analogue<-Nsave %>% 
         filter(time == changeTime+2000) %>%
