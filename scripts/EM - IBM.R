@@ -5,7 +5,7 @@ library(tidyr)
 #library(viridis)
 #library(vegan)
 
-EM_IBM<-function(species = 30, patches = 20, mutation_r = 0.01, disp = 0.01, type = "co-exist", r = 0.5, changeTime = 2000) {
+EM_IBM<-function(species = 50, patches = patches, mutation_r = 0.01, disp = 0.01, type = "co-exist", r = 0.5, changeTime = changeTime) {
   
   burnIn<-1000
   Tmax<-burnIn+changeTime+burnIn
@@ -139,6 +139,9 @@ EM_IBM<-function(species = 30, patches = 20, mutation_r = 0.01, disp = 0.01, typ
   return(Nsave)
 }
 
+patches<-20
+changeTime<-2000
+
 dispV<-c(0.0001,0.001,0.01,0.1,1)
 mutationV<-c(0,0.01,0.03,0.05)
 results.df<-data.frame()
@@ -148,16 +151,10 @@ for(rep in 1:5){
       
       Nsave<-EM_IBM(mutation_r = mut, disp = disp)
       
-      N_pre<-Nsave %>% 
-        filter(time == 1000)
-      
-      N_post<-Nsave %>% 
-        filter(time == 4000)
-      
       analogue<-Nsave %>% 
-        filter(time == 4000) %>%
+        filter(time == changeTime+2000) %>%
         select(patch,Environment) %>% 
-        mutate(analogue = Environment<=25) %>%
+        mutate(analogue = Environment<=(1+patches/2)) %>%
         select(-Environment) %>% 
         group_by(patch) %>% 
         slice(1) %>% 
@@ -166,24 +163,53 @@ for(rep in 1:5){
       Nsave<-left_join(Nsave,analogue)
       
       Local<-Nsave %>% 
-        filter(time==1000 | time == 4000) %>% 
+        filter(time==1000 | time == changeTime+2000) %>% 
         group_by(patch,time, analogue) %>% 
         summarise(S = sum(N>0), N = sum(N)) %>% 
         ungroup() %>% 
         group_by(time, analogue) %>% 
         summarise(S = mean(S), N = mean(N)) %>% 
-        mutate(Scale = "Local")
+        ungroup() %>% 
+        group_by(analogue) %>% 
+        summarise(S_ratio = last(S)/first(S), N_ratio = last(N)/first(N)) %>% 
+        mutate(scale = "Local")
       
       Regional<-Nsave %>% 
-        filter(time==1000 | time == 4000) %>% 
+        filter(time==1000 | time == changeTime+2000) %>% 
         group_by(time, analogue, species) %>% 
         summarise(N = sum(N)) %>% 
         ungroup() %>% 
         group_by(time, analogue) %>% 
         summarise(S = sum(N>0), N = sum(N)) %>% 
-        mutate(Scale = "Regional")
+        ungroup() %>% 
+        group_by(analogue) %>% 
+        summarise(S_ratio = last(S)/first(S), N_ratio = last(N)/first(N)) %>% 
+        mutate(scale = "Regional")
+      
+      z.results<-Nsave %>% 
+        filter(time==1000 | time == changeTime+2000) %>% 
+        complete(time,nesting(patch, species),fill = list(N = 0)) %>%
+        select(-analogue) %>% 
+        left_join(analogue) %>% 
+        group_by(species, analogue) %>% 
+        mutate(persist = last(N)>0) %>% 
+        filter(persist == TRUE) %>% 
+        ungroup() %>% 
+        group_by(species) %>% 
+        mutate(initial.z = weighted.mean(z, w = N)) %>% 
+        group_by(species,time, analogue, initial.z) %>%
+        summarise(z.sd = sd(z, na.rm = TRUE), z = weighted.mean(z,w = N)) %>% 
+        filter(time == changeTime+2000) %>% 
+        ungroup() %>% 
+        group_by(species, analogue) %>% 
+        summarise(z = mean(z-initial.z, na.rm = TRUE)) %>% 
+        ungroup() %>% 
+        group_by(analogue) %>% 
+        summarise(z_change = mean(z, na.rm = TRUE)) %>% 
+        mutate(scale = "Regional")
       
       results.hold<-bind_rows(Local,Regional)
+      results.hold<- left_join(results.hold, z.results)
       results.hold$dispersal <- disp
       results.hold$rep <- rep
       results.hold$mutation_rate <- mut
@@ -193,5 +219,5 @@ for(rep in 1:5){
   }
 }
 
-save(results.df, file = "./EM_results.RData")
+save(results.df, file = "./EM_results_new.RData")
 
