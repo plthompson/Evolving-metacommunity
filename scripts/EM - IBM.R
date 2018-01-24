@@ -5,7 +5,7 @@ library(tidyr)
 #library(viridis)
 #library(vegan)
 
-EM_IBM<-function(species = 80, patches = patches, mutation_r = 0.01, disp = 0.01, type = "co-exist", r = 0.5, changeTime = changeTime) {
+EM_IBM<-function(species = 80, patches = patches, mutation_r = 0.01, disp = 0.01, type = "co-exist", r = 0.5, changeTime = changeTime, intersp_mut_var = 0.25, intersp_disp_var = 0.25) {
   
   burnIn<-10000
   burnOut<-1000
@@ -21,7 +21,7 @@ EM_IBM<-function(species = 80, patches = patches, mutation_r = 0.01, disp = 0.01
   }
   
   Environment<-data.frame(patch = 1:patches, environment = c(1:(1+patches/2),(patches/2):2))
-  Species_traits<-data.frame(species = 1:species, z = seq(min(Environment$environment),max(Environment$environment),length = species), sig_p = 0.5,r = r, dispersal = rnorm(n = species,mean = disp,sd = disp*0.25), mut_r = rnorm(n = species,mean = mutation_r,sd = mutation_r*0.25), offspring = 0, type = "plant")
+  Species_traits<-data.frame(species = 1:species, z = seq(min(Environment$environment),max(Environment$environment),length = species), sig_p = 0.5,r = r, dispersal = rnorm(n = species,mean = disp,sd = disp*intersp_disp_var), mut_r = rnorm(n = species,mean = mutation_r,sd = mutation_r*intersp_mut_var), offspring = 0, type = "plant")
   Species_traits$dispersal[Species_traits$dispersal>1]<-1
   Species_traits$dispersal[Species_traits$dispersal<0]<-0
   
@@ -203,10 +203,10 @@ EM_IBM<-function(species = 80, patches = patches, mutation_r = 0.01, disp = 0.01
 patches<-30
 changeTime<-3000
 
-dispV<-c(0.0001,0.0005,0.001,0.01,0.1)
+dispV<-c(0.00001,0.00005,0.0001,0.0005,0.001,0.01,0.1)
 mutationV<-c(0,0.01,0.02,0.03,0.04,0.05,0.07)
 results.df<-data.frame()
-for(rep in 1:5){
+for(rep in 1:20){
   for(disp in dispV){
     for(mut in mutationV){
       
