@@ -24,6 +24,7 @@ EM_IBM<-function(species = 80, patches = patches, mutation_r = 0.01, disp = 0.01
   Species_traits<-data.frame(species = 1:species, z = seq(min(Environment$environment),max(Environment$environment),length = species), sig_p = 0.5,r = r, dispersal = rnorm(n = species,mean = disp,sd = disp*intersp_disp_var), mut_r = rnorm(n = species,mean = mutation_r,sd = mutation_r*intersp_mut_var), offspring = 0, type = "plant")
   Species_traits$dispersal[Species_traits$dispersal>1]<-1
   Species_traits$dispersal[Species_traits$dispersal<0]<-0
+  Species_traits$dispersal[Species_traits$mut_r<0]<-0
   
   int_scaler<-0.01
   
