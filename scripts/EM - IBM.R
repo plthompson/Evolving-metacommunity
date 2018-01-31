@@ -208,16 +208,16 @@ EM_IBM<-function(species = 80, patches = patches, mutation_r = 0.01, disp = 0.01
 }
 
 patches<-30
-changeTime<-3000
+changeTime<-15000
 
 dispV<-c(0.00001,0.00005,0.0001,0.0005,0.001,0.01,0.1)
 mutationV<-c(0,0.01,0.02,0.03,0.04,0.05,0.07)
 results.df<-data.frame()
-for(rep in 1:20){
+for(rep in 1:3){
   for(disp in dispV){
     for(mut in mutationV){
       
-      Nsave<-EM_IBM(mutation_r = mut, disp = disp, patches = patches, changeTime = changeTime, type = "priority")
+      Nsave<-EM_IBM(mutation_r = mut, disp = disp, patches = patches, changeTime = changeTime, type = "co-exist")
       
       analogue<-Nsave %>% 
         filter(time == max(Nsave$time)) %>%
