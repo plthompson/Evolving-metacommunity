@@ -24,7 +24,7 @@ EM_IBM<-function(species = 80, patches = patches, mutation_r = 0.01, disp = 0.01
   Species_traits<-data.frame(species = 1:species, z = seq(min(Environment$environment),max(Environment$environment),length = species), sig_p = 0.5,r = r, dispersal = rnorm(n = species,mean = disp,sd = disp*intersp_disp_var), mut_r = rnorm(n = species,mean = mutation_r,sd = mutation_r*intersp_mut_var), offspring = 0, type = "plant")
   Species_traits$dispersal[Species_traits$dispersal>1]<-1
   Species_traits$dispersal[Species_traits$dispersal<0]<-0
-  Species_traits$dispersal[Species_traits$mut_r<0]<-0
+  Species_traits$mut_r[Species_traits$mut_r<0]<-0
   
   int_scaler<-0.01
   
@@ -171,11 +171,17 @@ EM_IBM<-function(species = 80, patches = patches, mutation_r = 0.01, disp = 0.01
       names(ind.df2)[1]<-"parent"
       ind.df2$individual<-(max(ind.df$individual)+1):(max(ind.df$individual)+nrow(ind.df2))
       
-      ind.df2$z<-rnorm(n = nrow(ind.df2), mean = ind.df2$z, sd = ind.df2$mut_r)
+      #ind.df2$z<-rnorm(n = nrow(ind.df2), mean = ind.df2$z, sd = ind.df2$mut_r)
+      mutation<-rnorm(n = nrow(ind.df2),mean = mutation_r, sd = mutation_r*intersp_mut_var)
+      mutation[mutation<0]<-0
+      ind.df2$z<-rnorm(n = nrow(ind.df2), mean = ind.df2$z, sd = mutation)
       
       #dispersal
       ind.df2$parent<-NULL
-      dispersers<-rbinom(n = nrow(ind.df2),size = 1,prob = ind.df2$dispersal)
+      #dispersers<-rbinom(n = nrow(ind.df2),size = 1,prob = ind.df2$dispersal)
+      dispersal<-rnorm(n = nrow(ind.df2),mean = disp, sd = disp*intersp_disp_var)
+      dispersal[dispersal<0]<-0 ; dispersal[dispersal>1]<-1
+      dispersers<-rbinom(n = nrow(ind.df2),size = 1,prob = dispersal)
       
       ind.df2$patch[dispersers]<-ind.df2$patch[dispersers]+sample(c(-1,1),size =sum(dispersers),replace = TRUE)
       ind.df2$patch[ind.df2$patch<1]<-patches
