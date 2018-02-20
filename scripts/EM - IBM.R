@@ -2,10 +2,185 @@
 library(dplyr)
 library(ggplot2)
 library(tidyr)
-#library(viridis)
-#library(vegan)
+library(igraph)
+library(NetIndices)
+library(vegan)
+
+
+GenInd2<-function (Flow = NULL, Tij = t(Flow), Import = NULL, Export = NULL,  tol = 0) {
+  if(length(Flow)==0){
+    list(N = 0, T.. = 0, TST = 0, Lint = 0, 
+         Ltot = 0, LD = 0, C = 0, Tijbar = 0, 
+         TSTbar = 0, Cbar = 0)
+  } else{
+    N <- InternalNetwork(Tij, Import, Export)
+    RateComp <- N$FlowToC - N$FlowFromC
+    ncTij <- ncol(Tij)
+    nrTij <- nrow(Tij)
+    ncomp <- ncol(N$Tint)
+    compNames <- rownames(N$Tint)
+    intlinks <- length(which(N$Tint > tol))
+    links <- length(which(Tij > tol))
+    LD <- links/ncomp
+    ExportSum <- sum(N$FlowTo[N$export])
+    ImportSum <- sum(N$FlowFrom[N$import])
+    Throughflow <- sum(N$Tint) + ImportSum - sum(RateComp[RateComp < 
+                                                            0])
+    Throughput <- sum(Tij)
+    Avthrflow <- Throughflow/ncomp
+    Connectance <- intlinks/ncomp/(ncomp - 1)
+    Avlinkweight <- Throughput/links
+    linkmat <- N$Tint
+    linkmat[linkmat > 0] <- 1
+    Cij <- matrix(nrow = ncomp, ncol = ncomp, 0)
+    for (i in 1:ncomp) {
+      int_i <- union(which(linkmat[i, ] > 0), which(linkmat[, 
+                                                            i] > 0))
+      for (j in 1:ncomp) {
+        int_j <- union(which(linkmat[j, ] > 0), which(linkmat[, 
+                                                              j] > 0))
+        sect <- intersect(int_i, int_j)
+        uni <- union(int_i, int_j)
+        Cij[i, j] <- length(sect)/length(uni)
+      }
+    }
+    Compart <- (sum(Cij) - ncomp)/ncomp/(ncomp - 1)
+    list(N = ncomp, T.. = Throughput, TST = Throughflow, Lint = intlinks, 
+         Ltot = links, LD = LD, C = Connectance, Tijbar = Avlinkweight, 
+         TSTbar = Avthrflow, Cbar = Compart)
+  }}
+environment(GenInd2) <- environment(GenInd)
 
 EM_IBM<-function(species = 80, patches = patches, mutation_r = 0.01, disp = 0.01, type = "co-exist", r = 0.5, changeTime = changeTime, intersp_mut_var = 0.25, intersp_disp_var = 0.25) {
+  
+  calc_net_change<-function(N,N1,zmat,z1,BB,trophicV){
+    #network dissimilarity####
+    Ints<-BB
+    diag(Ints)<-0
+    colnames(Ints)<-rownames(Ints)<-paste(trophicV,1:species)
+    Ints[lower.tri(Ints)]<-0
+    Ints[,trophicV=="plants"]<-0
+    
+    nets_pre<-apply(N1,1,function(x){
+      Int_strength<-abs(Ints*rep(x,each=species))
+      Int_strength[x==0,]<-0
+      hold.df<-t(data.frame(Int_strength[x>0,x>0]))
+      net1<-graph.adjacency(hold.df,weighted = T)
+      return(net1) 
+    })
+    
+    nets_post<-apply(N,1,function(x){
+      Int_strength<-abs(Ints*rep(x,each=species))
+      Int_strength[x==0,]<-0
+      hold.df<-t(data.frame(Int_strength[x>0,x>0]))
+      net1<-graph.adjacency(hold.df,weighted = T)
+      return(net1) 
+    })
+    
+    initialInts<-t(matrix(c(Ints)*rep(t(N1),each=species),ncol=dim(N1)[1]))
+    initialInts_sub<-initialInts[,colSums(initialInts)!=0]
+    
+    Temp<-(Environment$environment+changet*changeTime)
+    Temp_I<-(Environment$environment)
+    
+    BC_dist.df<-data.frame()
+    for(i in 1:dim(N)[1]){
+      comInts<-c(Ints*rep(N[i,],each=species))
+      comInts<-comInts[colSums(initialInts)!=0]
+      
+      BC_dist<-as.matrix(vegdist(abs(rbind(comInts,initialInts_sub)),method="bray",binary = F))[1,-1]
+      BC_dist.df<-rbind(BC_dist.df,data.frame(BC_dist=1-min(BC_dist),Patch=i,Closest_patch=which(BC_dist==min(BC_dist)),Analogue=Temp[i] <= max(Temp_I))[1,])
+    }
+    
+    NetInds<-data.frame()
+    for(i in BC_dist.df$Patch){
+      if(length(E(nets_pre[[filter(BC_dist.df,Patch == i)$Closest_patch[1]]]))>0){
+        if(length(E(nets_post[[i]]))>0){
+          NetInds<-rbind(NetInds,data.frame(GenInd2(get.adjacency(nets_post[[i]],attr = "weight",sparse = F)))/data.frame(GenInd2(get.adjacency(nets_pre[[filter(BC_dist.df,Patch == i)$Closest_patch[1]]],attr = "weight",sparse = F))))
+        } else {
+          NetInds<-rbind(NetInds,0/data.frame(GenInd2(get.adjacency(nets_pre[[filter(BC_dist.df,Patch == i)$Closest_patch[1]]],attr = "weight",sparse = F))))
+        }
+      } else{
+        NetInds<-rbind(NetInds,NA)
+      }
+    }
+    
+    BC_dist.df<-bind_cols(BC_dist.df,NetInds)
+    
+    Net_dis.df<-BC_dist.df %>% 
+      group_by(Analogue) %>% 
+      mutate(Temp_diff=Temp[Patch]-Temp_I[Closest_patch]) %>%
+      dplyr::select(-Patch,-Closest_patch) %>% 
+      summarise_all(funs(mean(.,na.rm=T))) %>% 
+      mutate(Patches=c("no_analogue","analogue")) %>% 
+      dplyr::select(-Analogue, -Lint)
+    
+    names(Net_dis.df)<-c("Network_similarity","Nodes","System_throughput", "System_throughflow","Links","Link_density","Connectance","Average_link_weight","Compartment_throughflow","Compartmentalization","Temp_diff","Patches")
+    Net_dis.df<-Net_dis.df %>% 
+      gather(key = Response,value = "Value",Network_similarity:Temp_diff) %>% 
+      mutate(Dispersal=disp,Genetic_variation=mut,Rep=r, Trophic="all")
+    
+    clim_ana<-c("all","no_analogue","analogue")
+    for(ca in clim_ana){
+      if(ca == "all"){
+        patch_select<-1:patches
+      }
+      if(ca == "no_analogue"){
+        patch_select<-Temp > max(Temp_I)
+      }
+      if(ca == "analogue"){
+        patch_select<-Temp < max(Temp_I) & Temp > min(Temp_I)
+      }
+      trophic_select<-c("all","plant","herbivore","predator")
+      if(type != "trophic"){
+        trophic_select <-c("all")
+      }
+      for(troph in trophic_select){
+        if(troph == "all"){
+          sp_select<-1:species
+        } else {
+          sp_select<-trophicV==troph
+        }
+        N_select<-N[patch_select,sp_select]
+        N1_select<-N1[patch_select,sp_select]
+        z_select<-zmat[patch_select,sp_select]
+        z1_select<-z1[patch_select,sp_select]
+        
+        #remove z that is not present
+        z_select[N_select==0]<-NA
+        z_select[is.infinite(z_select)]<-NA
+        z1_select[N1_select==0]<-NA
+        z1_select[is.infinite(z_select)]<-NA
+        
+        #calculate mean change in z weighted by abundance
+        mean_z_change<-mean(do.call(c,lapply(1:ncol(N_select),function(i) abs(weighted.mean(z_select[,i],N_select[,i])-weighted.mean(z1_select[,i],N1_select[,i])))),na.rm=T)
+        
+        #calculate change in z sd - for species that persist
+        mean_z_sd_change<-mean(apply(z_select,2,sd,na.rm=T)[colSums(N_select)>0],na.rm=T)/mean(apply(z1_select,2,sd,na.rm=T)[colSums(N_select)>0],na.rm=T)
+        
+        #calculate change in richness, biomass, range size - range size only considers species that persist
+        response.data1<-data.frame(Value=c(mean(rowSums(N_select>0))/mean(rowSums(N1_select>0)), #local richness
+                                           mean(sum(colSums(N_select)>0)/sum(colSums(N1_select)>0)), #regional richness
+                                           mean(rowSums(N_select)/rowSums(N1_select),na.rm=T), #local biomass
+                                           mean((colSums(N_select>0)/colSums(N1_select>0))[colSums(N_select)>0],na.rm=T),#range size
+                                           mean_z_change,
+                                           mean_z_sd_change),
+                                   Response=c("Local S","Regional S","Local biomass","Range size","Optima change","Optima sd"),
+                                   Trophic=troph,
+                                   Dispersal=disp,
+                                   Genetic_variation=mut,
+                                   Rep=r,
+                                   Patches=ca)
+        if(ca=="all" & troph=="all"){
+          response.df<-response.data1
+        } else {response.df<-rbind(response.df,response.data1)
+        }
+      }
+    }
+    response.df<-bind_rows(response.df,Net_dis.df)
+    return(response.df)
+  }
+  
   
   burnIn<-10000
   burnOut<-1000
@@ -138,6 +313,19 @@ EM_IBM<-function(species = 80, patches = patches, mutation_r = 0.01, disp = 0.01
     
     N.mat[is.na(N.mat)]<-0
     
+    if(i == burnIn){
+      N1<-N.mat
+      
+      z.mat<-left_join(hold.df,ind.df %>% 
+                         group_by(patch, species) %>% 
+                         summarise(z = mean(z)), by = c("patch","species")) %>% 
+        spread(key = species,value = z) %>% 
+        data.matrix()
+      z.mat<-z.mat[,-1]
+      
+      z1<-z.mat
+    }
+    
     if(i>burnIn & i<burnIn+changeTime){
       Environment$environment<-Environment$environment+changet
       ind.df$environment<-ind.df$environment+changet
@@ -203,27 +391,47 @@ EM_IBM<-function(species = 80, patches = patches, mutation_r = 0.01, disp = 0.01
   }
   close(pb)
   
+    N<-N.mat
+    
+    z.mat<-left_join(hold.df,ind.df %>% 
+                       group_by(patch, species) %>% 
+                       summarise(z = mean(z)), by = c("patch","species")) %>% 
+      spread(key = species,value = z) %>% 
+      data.matrix()
+    z.mat<-z.mat[,-1]
+    
+    z<-z.mat
   
-  return(Nsave)
+  net_change.df<-calc_net_change(N = N,N1 = N1,zmat = z,z1 = z1,BB = B, trophicV = rep("p", species))
+  
+  
+  return(list(Nsave=Nsave,net_change.df=net_change.df))
 }
 
 patches<-30
 changeTime<-15000
 
-dispV<-c(0.00001,0.00005,0.0001,0.0005,0.001,0.01,0.1)
-mutationV<-c(0,0.01,0.02,0.03,0.04,0.05,0.07)
+dispV<-c(0.00001,0.001)#c(0.00001,0.00005,0.0001,0.0005,0.001,0.01,0.1)
+mutationV<-c(0,0.0025,0.005,0.0075,0.01,0.02)#c(0,0.001,0.005,0.01,0.02)
 results.df<-data.frame()
-for(rep in 1:3){
+for(rep in 1:5){
   for(disp in dispV){
     for(mut in mutationV){
+      print(paste("Rep - ",rep,"; Disp - ", disp,"; mut - ", mut, sep= ""))
       
-      Nsave<-EM_IBM(mutation_r = mut, disp = disp, patches = patches, changeTime = changeTime, type = "co-exist")
+      fileConn<-file("./output_r1.txt")
+      writeLines(paste("Rep - ",rep,"; Disp - ", disp,"; mut - ", mut, sep= ""), fileConn)
+      close(fileConn)
+      
+      Nsave1<-EM_IBM(mutation_r = mut, disp = disp, patches = patches, changeTime = changeTime, type = "co-exist")
+      
+      Nsave<-Nsave1$Nsave
       
       analogue<-Nsave %>% 
         filter(time == max(Nsave$time)) %>%
-        select(patch,Environment) %>% 
+        dplyr::select(patch,Environment) %>% 
         mutate(analogue = Environment<=(1+patches/2)) %>%
-        select(-Environment) %>% 
+        dplyr::select(-Environment) %>% 
         group_by(patch) %>% 
         slice(1) %>% 
         ungroup()
@@ -257,7 +465,7 @@ for(rep in 1:3){
       z.results<-Nsave %>% 
         filter(time==10000 | time == max(Nsave$time)) %>% 
         complete(time,nesting(patch, species),fill = list(N = 0)) %>%
-        select(-analogue) %>% 
+        dplyr::select(-analogue) %>% 
         left_join(analogue) %>% 
         group_by(species, analogue) %>% 
         mutate(persist = last(N)>0) %>% 
@@ -282,10 +490,12 @@ for(rep in 1:3){
       results.hold$rep <- rep
       results.hold$mutation_rate <- mut
       
-      results.df<-bind_rows(results.df,results.hold)
+      
+      
+      results.df<-bind_rows(results.df,Nsave1$net_change.df)
     }
   }
 }
 
-save(results.df, file = "./EM_results_priority.RData")
+save(results.df, file = "./EM_results.RData")
 
