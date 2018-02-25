@@ -196,7 +196,12 @@ EM_IBM<-function(species = 80, patches = patches, mutation_r = 0.01, disp = 0.01
   }
   
   Environment<-data.frame(patch = 1:patches, environment = c(1:(1+patches/2),(patches/2):2))
-  Species_traits<-data.frame(species = 1:species, z = seq(min(Environment$environment),max(Environment$environment),length = species), sig_p = 0.5,r = r, dispersal = rnorm(n = species,mean = disp,sd = disp*intersp_disp_var), mut_r = rnorm(n = species,mean = mutation_r,sd = mutation_r*intersp_mut_var), offspring = 0, type = "plant")
+  if(mutation_r == "vary"){
+    Species_traits<-data.frame(species = 1:species, z = seq(min(Environment$environment),max(Environment$environment),length = species), sig_p = 0.5,r = r, dispersal = rnorm(n = species,mean = disp,sd = disp*intersp_disp_var), mut_r = runif(n = species, min = 0, max = 0.01), offspring = 0, type = "plant")
+    } else {
+    Species_traits<-data.frame(species = 1:species, z = seq(min(Environment$environment),max(Environment$environment),length = species), sig_p = 0.5,r = r, dispersal = rnorm(n = species,mean = disp,sd = disp*intersp_disp_var), mut_r = rnorm(n = species,mean = as.numeric(mutation_r),sd = as.numeric(mutation_r)*intersp_mut_var), offspring = 0, type = "plant")
+  }
+  
   Species_traits$dispersal[Species_traits$dispersal>1]<-1
   Species_traits$dispersal[Species_traits$dispersal<0]<-0
   Species_traits$mut_r[Species_traits$mut_r<0]<-0
@@ -207,7 +212,12 @@ EM_IBM<-function(species = 80, patches = patches, mutation_r = 0.01, disp = 0.01
   diag(B)<- -1*int_scaler*r
   
   if(type == "priority"){
-    B<-matrix(rnorm(species*species,mean = -0.7,sd=0.2),nrow=species,ncol=species)*int_scaler*r #priority effects
+    B<-matrix(runif(n = species*species,-0.5,-0),nrow = species, ncol = species)*int_scaler*r #stable co-existence
+    high_comp<-sample(1:species,size = round(species*0.4),replace = FALSE)
+    high_comp2<-sample(high_comp,size = length(high_comp),replace=FALSE)
+    for(hc in 1:length(high_comp)){
+      B[high_comp[hc],high_comp2[hc]]<- -1.2 * int_scaler * r
+    }
     diag(B)<- -1*int_scaler*r
   }
   
@@ -359,10 +369,14 @@ EM_IBM<-function(species = 80, patches = patches, mutation_r = 0.01, disp = 0.01
       names(ind.df2)[1]<-"parent"
       ind.df2$individual<-(max(ind.df$individual)+1):(max(ind.df$individual)+nrow(ind.df2))
       
-      #ind.df2$z<-rnorm(n = nrow(ind.df2), mean = ind.df2$z, sd = ind.df2$mut_r)
-      mutation<-rnorm(n = nrow(ind.df2),mean = mutation_r, sd = mutation_r*intersp_mut_var)
-      mutation[mutation<0]<-0
-      ind.df2$z<-rnorm(n = nrow(ind.df2), mean = ind.df2$z, sd = mutation)
+
+      
+      if(i>2000){
+        ind.df2$z<-rnorm(n = nrow(ind.df2), mean = ind.df2$z, sd = ind.df2$mut_r)
+        # mutation<-rnorm(n = nrow(ind.df2),mean = mutation_r, sd = mutation_r*intersp_mut_var)
+        # mutation[mutation<0]<-0
+        # ind.df2$z<-rnorm(n = nrow(ind.df2), mean = ind.df2$z, sd = mutation)
+      } 
       
       #dispersal
       ind.df2$parent<-NULL
@@ -411,8 +425,8 @@ EM_IBM<-function(species = 80, patches = patches, mutation_r = 0.01, disp = 0.01
 patches<-30
 changeTime<-15000
 
-dispV<-c(0.00001,0.001)#c(0.00001,0.00005,0.0001,0.0005,0.001,0.01,0.1)
-mutationV<-c(0,0.0025,0.005,0.0075,0.01,0.02)#c(0,0.001,0.005,0.01,0.02)
+dispV<-c(0,0.00005,0.001,0.01)#c(0.00001,0.00005,0.0001,0.0005,0.001,0.01,0.1)
+mutationV<-c(0,0.0025,0.005,0.0075,0.01,0.02, "vary")#c(0,0.001,0.005,0.01,0.02)
 results.df<-data.frame()
 for(rep in 1:5){
   for(disp in dispV){
@@ -423,74 +437,17 @@ for(rep in 1:5){
       writeLines(paste("Rep - ",rep,"; Disp - ", disp,"; mut - ", mut, sep= ""), fileConn)
       close(fileConn)
       
-      Nsave1<-EM_IBM(mutation_r = mut, disp = disp, patches = patches, changeTime = changeTime, type = "co-exist")
+      Nsave1<-EM_IBM(mutation_r = mut, disp = disp, patches = patches, changeTime = changeTime, type = "priority")
       
       Nsave<-Nsave1$Nsave
       
-      analogue<-Nsave %>% 
-        filter(time == max(Nsave$time)) %>%
-        dplyr::select(patch,Environment) %>% 
-        mutate(analogue = Environment<=(1+patches/2)) %>%
-        dplyr::select(-Environment) %>% 
-        group_by(patch) %>% 
-        slice(1) %>% 
-        ungroup()
-      
-      Nsave<-left_join(Nsave,analogue)
-      
-      Local<-Nsave %>% 
-        filter(time==10000 | time == max(Nsave$time)) %>% 
-        group_by(patch,time, analogue) %>% 
-        summarise(S = sum(N>0), N = sum(N)) %>% 
-        ungroup() %>% 
-        group_by(time, analogue) %>% 
-        summarise(S = mean(S), N = mean(N)) %>% 
-        ungroup() %>% 
-        group_by(analogue) %>% 
-        summarise(S_ratio = last(S)/first(S), N_ratio = last(N)/first(N)) %>% 
-        mutate(scale = "Local")
-      
-      Regional<-Nsave %>% 
-        filter(time==10000 | time == max(Nsave$time)) %>% 
-        group_by(time, analogue, species) %>% 
-        summarise(N = sum(N)) %>% 
-        ungroup() %>% 
-        group_by(time, analogue) %>% 
-        summarise(S = sum(N>0), N = sum(N)) %>% 
-        ungroup() %>% 
-        group_by(analogue) %>% 
-        summarise(S_ratio = last(S)/first(S), N_ratio = last(N)/first(N)) %>% 
-        mutate(scale = "Regional")
-      
-      z.results<-Nsave %>% 
-        filter(time==10000 | time == max(Nsave$time)) %>% 
-        complete(time,nesting(patch, species),fill = list(N = 0)) %>%
-        dplyr::select(-analogue) %>% 
-        left_join(analogue) %>% 
-        group_by(species, analogue) %>% 
-        mutate(persist = last(N)>0) %>% 
-        filter(persist == TRUE) %>% 
-        ungroup() %>% 
-        group_by(species) %>% 
-        mutate(initial.z = weighted.mean(z, w = N)) %>% 
-        group_by(species,time, analogue, initial.z) %>%
-        summarise(z.sd = sd(z, na.rm = TRUE), z = weighted.mean(z,w = N)) %>% 
-        filter(time == max(Nsave$time)) %>% 
-        ungroup() %>% 
-        group_by(species, analogue) %>% 
-        summarise(z = mean(z-initial.z, na.rm = TRUE)) %>% 
-        ungroup() %>% 
-        group_by(analogue) %>% 
-        summarise(z_change = mean(z, na.rm = TRUE)) %>% 
-        mutate(scale = "Regional")
-      
-      results.hold<-bind_rows(Local,Regional)
-      results.hold<- left_join(results.hold, z.results)
-      results.hold$dispersal <- disp
-      results.hold$rep <- rep
-      results.hold$mutation_rate <- mut
-      
-      
+      ggplot(filter(Nsave),aes(x=patch,y=time,color=z))+
+        geom_point(size = 0.5)+
+        facet_wrap(~species)+
+        scale_color_viridis()+
+        geom_hline(yintercept = c(10000,20000))+
+        removeGrid()
+      ggsave(paste("disp = ",disp, " mut = ", mut,".png", sep = ""),width=11,height = 8)
       
       results.df<-bind_rows(results.df,Nsave1$net_change.df)
     }
