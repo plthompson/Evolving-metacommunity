@@ -216,7 +216,8 @@ EM_IBM<-function(species = 80, patches = patches, mutation_r = 0.01, disp = 0.01
     high_comp<-sample(1:species,size = round(species*0.4),replace = FALSE)
     high_comp2<-sample(high_comp,size = length(high_comp),replace=FALSE)
     for(hc in 1:length(high_comp)){
-      B[high_comp[hc],high_comp2[hc]]<- -1.2 * int_scaler * r
+      B[high_comp[hc],high_comp2[hc]]<- runif(min = -1.22,max = -1.18,n = 1) * int_scaler * r
+      B[high_comp2[hc],high_comp[hc]]<- runif(min = -1.22,max = -1.18,n = 1) * int_scaler * r
     }
     diag(B)<- -1*int_scaler*r
   }
