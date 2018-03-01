@@ -183,7 +183,7 @@ EM_IBM<-function(species = 80, patches = patches, mutation_r = 0.01, disp = 0.01
   
   
   burnIn<-10000
-  burnOut<-1000
+  burnOut<-5000
   Tmax<-burnIn+changeTime+burnOut
   changeMag<-patches/4
   changet<-changeMag/(changeTime-1)
@@ -446,7 +446,7 @@ for(rep in 1:5){
         geom_point(size = 0.5)+
         facet_wrap(~species)+
         scale_color_viridis()+
-        geom_hline(yintercept = c(10000,20000))+
+        geom_hline(yintercept = c(10000,25000))+
         removeGrid()
       ggsave(paste("disp = ",disp, " mut = ", mut,".png", sep = ""),width=11,height = 8)
       
